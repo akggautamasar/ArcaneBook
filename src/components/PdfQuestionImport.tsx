@@ -125,6 +125,7 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
   const [raw,setRaw]=useState('');
   const [drafts,setDrafts]=useState<Draft[]>([]);
   const [loading,setLoading]=useState(false);
+  const [ocrProgress,setOcrProgress]=useState('');
   const [ocrEnabled,setOcrEnabled]=useState(true);
   const [images,setImages]=useState<File[]>([]);
   const [appendText,setAppendText]=useState(false);
@@ -241,7 +242,7 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
         <label className="flex gap-2 items-center text-sm"><input type="checkbox" checked={appendText} onChange={event=>setAppendText(event.target.checked)}/> Append to existing extracted text (for separate answer pages)</label>
         <Button type="button" disabled={loading||images.length===0} onClick={()=>void readImages()}>Extract questions from {images.length||''} image{images.length===1?'':'s'}</Button>
       </div>
-      <p className="text-sm text-muted-foreground" role="status">{loading?'Processing pages…':message}</p>
+      <p className="text-sm text-muted-foreground" role="status" aria-live="polite">{message || (loading?'Processing pages…':'Ready')}</p>
       <Textarea className="min-h-48 font-mono text-xs" value={raw} onChange={e=>setRaw(e.target.value)} placeholder="Extracted PDF text appears here. You can also paste corrected OCR text. Include numbered questions, (a)-(d) options, inline Answer:/Explanation: or a separate ANSWER KEY."/>
       <Button disabled={loading||!raw.trim()} onClick={parse}>Detect questions and answers</Button>
       {drafts.length>0&&<div className="space-y-3">
