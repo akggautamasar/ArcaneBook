@@ -35,19 +35,6 @@ function renderCrop(canvas:HTMLCanvasElement, x:number, width:number):HTMLCanvas
   ctx.fillStyle='#fff';ctx.fillRect(0,0,width,out.height);ctx.drawImage(canvas,x,0,width,canvas.height,0,0,width,canvas.height);
   return out;
 }
-async function serverExtract(file:File,pages:string):Promise<string> {
-  const form=new FormData();
-  form.append('file',file);form.append('pages',pages);form.append('columns','auto');
-  const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),180000);
-  try {
-    const response=await fetch('https://arcanebook-ocr.onrender.com/extract',{method:'POST',body:form,signal:controller.signal});
-    if(!response.ok)throw new Error('OCR server HTTP '+response.status);
-    const result=await response.json() as {text?:string};
-    if(typeof result.text!=='string')throw new Error('Invalid OCR response');
-    return result.text;
-  }finally{clearTimeout(timeout);}
-}
 async function recognizeImages(files: File[], onProgress:(message:string)=>void):Promise<string> {
   const ocr=await loadOcr();
   onProgress('Loading Hindi and English OCR models…');
@@ -208,7 +195,7 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
       const selectedSpec=pageMode==='all'?'1-'+Math.min(10,pdf.numPages):pageMode==='range'?startPage+'-'+Math.min(pdf.numPages,startPage+Math.min(10,pageCount)-1):pageList;
       try{
         setMessage('Using OCR server; free hosting may take time to wake up…');
-        const serverText=await serverExtract(file,selectedSpec);
+        const serverText=await serverExtract(file,selectedSpec,'auto');
         if(!serverText.trim())throw new Error('Empty server OCR result');
         setRaw(previous=>appendText&&previous.trim()?previous+'\n'+serverText:serverText);
         setMessage('Server extraction complete. Review text and detect questions.');
