@@ -88,51 +88,82 @@ async function serverExtract(file:File, pages:string, columns:string):Promise<st
   }finally{clearTimeout(timeout);}
 }
 function extract(text: string, positive: number, negative: number): Draft[] {
-  const lines = text.replace(/\r/g,'').split('\n').map(s=>s.trim()).filter(Boolean);
-  const drafts: Draft[] = [];
-  const keys = new Map<string, Map<number, number>>();
-  let set = 'Practice Set 1', section = 'questions', current: Draft | null = null, explanation = false;
-  const setMatch = (s: string) => s.match(/(?:practice\s*set|प्रैक्टिस\s*सेट|अभ्यास\s*सेट)\s*[-:–]?\s*(\d+)/i);
-  const optionMatch = (s: string) => s.match(/^\(?([a-dA-D])\)?[.)]\s*(.+)$/);
-  const answerMatch = (s: string) => s.match(/^(?:answer|ans|correct\s*answer|उत्तर|सही\s*उत्तर)\s*[:：.-]?\s*\(?([a-dA-D])\)?\b/i);
-  const explanationMatch = (s: string) => s.match(/^(?:explanation|solution|व्याख्या|समाधान|हल)\s*[:：.-]?\s*(.*)/i);
-  const letter = (s: string) => s.toLowerCase().charCodeAt(0)-97;
-  const keyFor = (name: string) => { if(!keys.has(name)) keys.set(name,new Map()); return keys.get(name)!; };
-  for(const line of lines) {
-    const sm = setMatch(line);
-    if(sm){set='Practice Set '+sm[1];section='questions';current=null;explanation=false;continue;}
+  const lines=text.replace(/\r/g,'').replace(/\\n/g,'\n').split('\n').map(x=>x.trim()).filter(Boolean);
+  const drafts:Draft[]=[];
+  const keys=new Map<number,number>();
+  let current:Draft|null=null;
+  let section:'questions'|'key'='questions';
+  let explanation=false;
+  let set='Imported Questions';
+  const normalize=(value:string)=>value.replace(/[०-९]/g,ch=>String('०१२३४५६७८९'.indexOf(ch)));
+  const answerIndex=(value:string)=>'abcd'.indexOf(value.toLowerCase());
+  const answerPattern=/^(?:ans(?:wer)?|correct\s*answer|उत्तर|सही\s*उत्तर)\s*[.:：\-]?\s*\(?([a-d])\)?(?=\s|[.):,;]|$)/i;
+  // Supports four options on one line as well as one option per line.
+  const optionPattern=/(^|\s)(?:\(([a-d])\)|([a-d])[.)])\s*/gi;
+  const addOptions=(line:string)=>{
+    if(!current)return false;
+    const markers=[...line.matchAll(optionPattern)];
+    if(!markers.length)return false;
+    // Avoid treating incidental text inside questions as an option list.
+    if(markers[0].index!==0 && current.question.options.length===0 && markers.length<2)return false;
+    let accepted=false;
+    for(let i=0;i<markers.length;i++){
+      const marker=markers[i],idx=answerIndex(marker[2]||marker[3]);
+      const value=line.slice((marker.index||0)+marker[0].length,i+1<markers.length?markers[i+1].index:undefined).trim();
+      if(idx===current.question.options.length && value){
+        current.question.options.push(value);accepted=true;
+      }else if(idx>=0){
+        current.warning='Option order or OCR letters need manual review';
+      }
+    }
+    return accepted;
+  };
+  for(const original of lines){
+    const line=normalize(original);
+    const setMatch=line.match(/(?:practice\s*set|प्रैक्टिस\s*सेट|अभ्यास\s*सेट)\s*[-:–]?\s*(\d+)/i);
+    if(setMatch){set='Practice Set '+setMatch[1];current=null;section='questions';explanation=false;continue;}
     if(/^(?:answer\s*key|उत्तर\s*कुंजी|उत्तरमाला)/i.test(line)){section='key';current=null;continue;}
-    if(/^(?:solutions?\s*[:：-]?|विस्तृत\s*हल)/i.test(line)){section='solutions';current=null;continue;}
     if(section==='key'){
-      const entries=[...line.matchAll(/(?:^|\s)(\d{1,3})\s*[.)-]?\s*\(?([a-dA-D])\)?(?=\s|$|[,;])/g)];
-      entries.forEach(m=>keyFor(set).set(Number(m[1]),letter(m[2])));
+      for(const match of line.matchAll(/(?:^|[\s,;])(\d{1,3})\s*[.):\-]?\s*\(?([a-d])\)?(?=$|[\s,;])/gi)){
+        keys.set(Number(match[1]),answerIndex(match[2]));
+      }
       continue;
     }
-    if(section==='solutions'){
-      const match=line.match(/^(\d{1,3})\s*[.)]\s*(?:\(?([a-dA-D])\)?\s*[.)-]?)?\s*(.*)/);
-      if(match){current=drafts.find(d=>d.set===set&&d.number===Number(match[1]))||null; if(current&&match[2]){current.question.correctOptionIndex=letter(match[2]);current.answerFound=true;} if(current&&match[3])current.question.explanation+=match[3]+' ';continue;}
-      if(current)current.question.explanation+=line+' ';
+    const answer=line.match(answerPattern);
+    if(answer&&current){
+      current.question.correctOptionIndex=answerIndex(answer[1]);
+      current.answerFound=true;explanation=true;
+      const rest=line.slice(answer[0].length).replace(/^[\s:.)\-]+/,'');
+      if(rest)current.question.explanation+=rest+' ';
       continue;
     }
-    const q=line.match(/^(\d{1,3})\s*[.)]\s*(.+)$/);
-    if(q){current={number:Number(q[1]),set,source:line,answerFound:false,warning:'',question:{id:crypto.randomUUID(),questionText:q[2],options:[],correctOptionIndex:0,explanation:'',section:set,positiveMarks:positive,negativeMarks:negative,compText:''}};drafts.push(current);explanation=false;continue;}
+    const question=line.match(/^(\d{1,3})\s*[.)]\s*(.+)$/);
+    if(question){
+      current={number:Number(question[1]),set,source:original,answerFound:false,warning:'',question:{
+        id:crypto.randomUUID(),questionText:question[2],options:[],correctOptionIndex:0,explanation:'',
+        section:set,positiveMarks:positive,negativeMarks:negative,compText:''
+      }};
+      drafts.push(current);explanation=false;
+      continue;
+    }
     if(!current)continue;
-    const answer=answerMatch(line);
-    if(answer){current.question.correctOptionIndex=letter(answer[1]);current.answerFound=true;explanation=true;const remainder=line.slice(answer[0].length).replace(/^[\\s:.)-]+/,'');if(remainder)current.question.explanation+=remainder+' ';continue;}
-    const exp=explanationMatch(line);
+    const exp=line.match(/^(?:explanation|solution|व्याख्या|समाधान|हल)\s*[:：.\-]?\s*(.*)/i);
     if(exp){explanation=true;current.question.explanation+=exp[1]+' ';continue;}
-    const option=optionMatch(line);
-    if(option&&!explanation){const index=letter(option[1]);if(index===current.question.options.length)current.question.options.push(option[2]);else current.warning='Options may be misordered';continue;}
+    if(!explanation&&addOptions(line))continue;
     if(explanation)current.question.explanation+=line+' ';
     else if(current.question.options.length)current.question.options[current.question.options.length-1]+=' '+line;
     else current.question.questionText+=' '+line;
   }
-  for(const d of drafts){
-    const key=keyFor(d.set).get(d.number);
-    if(key!==undefined){if(d.answerFound&&d.question.correctOptionIndex!==key)d.warning='Inline answer conflicts with answer key';else{d.question.correctOptionIndex=key;d.answerFound=true;}}
-    if(d.question.options.length!==4)d.warning=[d.warning,'Expected four options; verify against source PDF'].filter(Boolean).join('; ');
-    if(!d.answerFound)d.warning=[d.warning,'Answer not found — review required'].filter(Boolean).join('; ');
-    if(!d.question.explanation.trim())d.warning=[d.warning,'Explanation not found'].filter(Boolean).join('; ');
+  for(const draft of drafts){
+    const key=keys.get(draft.number);
+    if(key!==undefined){
+      if(draft.answerFound&&draft.question.correctOptionIndex!==key)draft.warning+=' Answer key conflicts with inline answer.';
+      else{draft.answerFound=true;draft.question.correctOptionIndex=key;}
+    }
+    if(draft.question.options.length!==4)draft.warning+=' Four complete options not detected; correct manually.';
+    if(!draft.answerFound)draft.warning+=' Answer missing; select the verified answer manually.';
+    if(!draft.question.explanation.trim())draft.warning+=' Explanation missing.';
+    draft.warning=draft.warning.trim();
   }
   return drafts;
 }
@@ -141,8 +172,7 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
   const [raw,setRaw]=useState('');
   const [drafts,setDrafts]=useState<Draft[]>([]);
   const [loading,setLoading]=useState(false);
-  const [ocrProgress,setOcrProgress]=useState('');
-  const [processingMode,setProcessingMode]=useState<'server'|'device'>('server');
+    const [processingMode,setProcessingMode]=useState<'server'|'device'>('server');
   const [columns,setColumns]=useState<'auto'|'one'|'two'>('auto');
   const [ocrEnabled,setOcrEnabled]=useState(true);
   const [images,setImages]=useState<File[]>([]);
@@ -312,11 +342,11 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
       {drafts.length>0&&<div className="space-y-3">
         <div className="flex flex-wrap justify-between items-center gap-2"><strong>{drafts.length} candidates · {drafts.filter(d=>d.answerFound&&d.question.options.length===4).length} with answers and four options</strong><Button onClick={importApproved} disabled={!drafts.some((d,i)=>selected[i]&&d.answerFound&&d.question.options.length===4)}>Import selected verified questions</Button></div>
         {drafts.map((d,i)=><div key={d.question.id} className="rounded-xl border p-3 space-y-2 min-w-0">
-          <label className="flex gap-2 items-center text-sm font-semibold"><input type="checkbox" checked={!!selected[i]} disabled={!d.answerFound||d.question.options.length!==4} onChange={e=>setSelected(prev=>({...prev,[i]:e.target.checked}))}/>{d.set} · Question {d.number}</label>
+          <label className="flex gap-2 items-center text-sm font-semibold"><input type="checkbox" checked={!!selected[i]} disabled={!d.answerFound||d.question.options.length!==4||!d.question.options.every(Boolean)} onChange={e=>setSelected(prev=>({...prev,[i]:e.target.checked}))}/>{d.set} · Question {d.number}</label>
           {d.warning&&<p className="text-xs text-amber-700">{d.warning}</p>}
           <Textarea value={d.question.questionText} onChange={e=>update(i,{questionText:e.target.value})} aria-label="Question text"/>
-          {d.question.options.map((option,j)=><input key={j} className="w-full min-w-0 rounded-md border p-2 text-sm" aria-label={`Option ${j+1}`} value={option} onChange={e=>update(i,{options:d.question.options.map((v,k)=>j===k?e.target.value:v)})}/>)}
-          <label className="block text-sm">Correct answer <select className="ml-2 rounded border p-2" value={d.answerFound?d.question.correctOptionIndex:'unknown'} onChange={e=>update(i,{correctOptionIndex:Number(e.target.value)},true)}><option value="unknown" disabled>Not found</option>{d.question.options.map((_,j)=><option key={j} value={j}>{String.fromCharCode(65+j)}</option>)}</select></label>
+          {Array.from({length:4},(_,j)=><input key={j} className="w-full min-w-0 rounded-md border p-2 text-sm" aria-label={`Option ${j+1}`} value={d.question.options[j]||''} onChange={e=>update(i,{options:Array.from({length:4},(_,k)=>j===k?e.target.value:(d.question.options[k]||''))})}/>)}
+          <label className="block text-sm">Correct answer <select className="ml-2 rounded border p-2" value={d.answerFound?d.question.correctOptionIndex:'unknown'} onChange={e=>update(i,{correctOptionIndex:Number(e.target.value)},true)}><option value="unknown" disabled>Not found</option>{[0,1,2,3].map(j=><option key={j} value={j}>{String.fromCharCode(65+j)}</option>)}</select></label>
           <Textarea placeholder="Explanation (optional)" value={d.question.explanation} onChange={e=>update(i,{explanation:e.target.value})}/>
         </div>)}
       </div>}
