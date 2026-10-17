@@ -71,6 +71,22 @@ async function recognizeImages(files: File[], onProgress:(message:string)=>void)
     return results.join('\\n');
   }finally{await worker.terminate();}
 }
+const OCR_SERVICE = 'https://arcanebook-ocr.onrender.com';
+async function serverExtract(file:File, pages:string, columns:string):Promise<string> {
+  const data=new FormData();
+  data.append('file',file);
+  data.append('pages',pages);
+  data.append('columns',columns);
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),180000);
+  try{
+    const response=await fetch(OCR_SERVICE+'/extract',{method:'POST',body:data,signal:controller.signal});
+    const payload=await response.json();
+    if(!response.ok)throw new Error(payload.detail||'OCR service error');
+    if(typeof payload.text!=='string')throw new Error('Invalid OCR response');
+    return payload.text;
+  }finally{clearTimeout(timeout);}
+}
 function extract(text: string, positive: number, negative: number): Draft[] {
   const lines = text.replace(/\r/g,'').split('\n').map(s=>s.trim()).filter(Boolean);
   const drafts: Draft[] = [];
@@ -126,6 +142,8 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
   const [drafts,setDrafts]=useState<Draft[]>([]);
   const [loading,setLoading]=useState(false);
   const [ocrProgress,setOcrProgress]=useState('');
+  const [processingMode,setProcessingMode]=useState<'server'|'device'>('server');
+  const [columns,setColumns]=useState<'auto'|'one'|'two'>('auto');
   const [ocrEnabled,setOcrEnabled]=useState(true);
   const [images,setImages]=useState<File[]>([]);
   const [appendText,setAppendText]=useState(false);
@@ -142,7 +160,17 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
     if(!images.length)return;
     setLoading(true);setDrafts([]);
     try{
-      const text=await recognizeImages(images,setMessage);
+      let text='';
+      if(processingMode==='server'){
+        const chunks:string[]=[];
+        for(const [index,file] of images.entries()){
+          setMessage(`Server OCR: screenshot ${index+1} of ${images.length}…`);
+          chunks.push(await serverExtract(file,'1',columns));
+        }
+        text=chunks.join('\\n');
+      }else{
+        text=await recognizeImages(images,setMessage);
+      }
       setRaw(previous=>appendText&&previous.trim()?previous+'\\n'+text:text);
       setMessage(`Processed ${images.length} screenshot(s). Review the OCR text, then detect questions and answers. Missing figures require manual handling.`);
     }catch(error){setMessage(error instanceof Error?error.message:'Unable to process screenshots');}
@@ -151,6 +179,16 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
   const readPdf=async(file:File)=>{
     setLoading(true);setMessage('Reading PDF text...');
     try{
+      if(processingMode==='server'){
+        let pages='1-10';
+        if(pageMode==='range')pages=`${startPage}-${startPage+pageCount-1}`;
+        if(pageMode==='list')pages=pageList;
+        setMessage('Sending selected pages to OCR server. First request may take longer while free service starts…');
+        const text=await serverExtract(file,pages,columns);
+        setRaw(previous=>appendText&&previous.trim()?previous+'\\n'+text:text);
+        setMessage('Server extraction complete. Review the text and detect questions.');
+        return;
+      }
       const pdfjs=await loadPdfJs();
       const pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),disableWorker:true}).promise;
       setTotalPages(pdf.numPages);
@@ -215,6 +253,21 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
   return <Card className="w-full min-w-0">
     <CardHeader><CardTitle>PDF to Mock Test — Review Import</CardTitle><CardDescription>Supports answers immediately after questions, answer keys after a complete set, and separately numbered solutions. Review every result before publishing.</CardDescription></CardHeader>
     <CardContent className="space-y-4 min-w-0">
+      <div className="rounded-xl border p-4 space-y-3">
+        <h3 className="font-semibold">Processing engine</h3>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <label className="flex items-center gap-2"><input type="radio" checked={processingMode==='server'} onChange={()=>setProcessingMode('server')}/> Fast server OCR (recommended)</label>
+          <label className="flex items-center gap-2"><input type="radio" checked={processingMode==='device'} onChange={()=>setProcessingMode('device')}/> On-device OCR (backup)</label>
+        </div>
+        <label className="block text-sm">Page layout
+          <select className="block mt-1 rounded-md border p-2 w-full max-w-sm" value={columns} onChange={e=>setColumns(e.target.value as 'auto'|'one'|'two')}>
+            <option value="auto">Automatic column detection</option>
+            <option value="one">Single column</option>
+            <option value="two">Two columns (left then right)</option>
+          </select>
+        </label>
+        <p className="text-xs text-muted-foreground">Server mode uploads selected source files to ArcaneBook OCR on Render. Device mode processes locally. Server OCR may have a cold-start delay on the free plan.</p>
+      </div>
       <label className="block rounded-xl border-2 border-dashed p-5 text-center cursor-pointer bg-slate-50">
         <span className="block font-semibold">Upload scanned or text PDF</span>
         <span className="block text-xs text-muted-foreground mt-1">Hindi + English OCR for scanned pages · Two-column reading · Process 1–10 pages at a time</span>
