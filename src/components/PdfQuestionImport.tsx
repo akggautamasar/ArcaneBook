@@ -129,6 +129,10 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
   const [images,setImages]=useState<File[]>([]);
   const [appendText,setAppendText]=useState(false);
   const [startPage,setStartPage]=useState(1);
+  const [pdfFile,setPdfFile]=useState<File|null>(null);
+  const [totalPages,setTotalPages]=useState<number|null>(null);
+  const [pageMode,setPageMode]=useState<'range'|'list'|'all'>('range');
+  const [pageList,setPageList]=useState('1,2,3');
   const [pageCount,setPageCount]=useState(3);
   const [message,setMessage]=useState('');
   const [selected,setSelected]=useState<Record<number,boolean>>({});
@@ -148,13 +152,34 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
     try{
       const pdfjs=await loadPdfJs();
       const pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),disableWorker:true}).promise;
+      setTotalPages(pdf.numPages);
       const pages:string[]=[];
-      const begin=Math.min(Math.max(1,startPage),pdf.numPages);
-      const end=Math.min(pdf.numPages,begin+Math.min(10,Math.max(1,pageCount))-1);
+      let selectedPages:number[]=[];
+      if(pageMode==='range'){
+        const begin=Math.min(Math.max(1,startPage),pdf.numPages);
+        const end=Math.min(pdf.numPages,begin+Math.min(10,Math.max(1,pageCount))-1);
+        selectedPages=Array.from({length:end-begin+1},(_,i)=>begin+i);
+      }else if(pageMode==='all'){
+        selectedPages=Array.from({length:Math.min(pdf.numPages,10)},(_,i)=>i+1);
+      }else{
+        const chosen=new Set<number>();
+        for(const token of pageList.split(',')){
+          const trimmed=token.trim();
+          if(!trimmed)continue;
+          const match=trimmed.match(/^(\\d+)(?:\\s*-\\s*(\\d+))?$/);
+          if(!match)throw new Error('Invalid page list. Use 2,4,7-9.');
+          const first=Number(match[1]),last=match[2]?Number(match[2]):first;
+          if(first<1||last<first||last>pdf.numPages)throw new Error(`Pages must be between 1 and ${pdf.numPages}.`);
+          if(last-first>100)throw new Error('Choose a smaller page range.');
+          for(let n=first;n<=last;n++)chosen.add(n);
+        }
+        selectedPages=Array.from(chosen).sort((a,b)=>a-b);
+        if(!selectedPages.length||selectedPages.length>10)throw new Error('Select between 1 and 10 pages per batch.');
+      }
       let worker:OcrWorker|undefined;
       try{
-        for(let i=begin;i<=end;i++){
-          setMessage(`Processing page ${i} of ${end}…`);
+        for(const [index,i] of selectedPages.entries()){
+          setMessage(`Processing selected page ${index+1} of ${selectedPages.length} (PDF page ${i})…`);
           const page=await pdf.getPage(i), items=(await page.getTextContent()).items;
           let previousY=Infinity, out='';
           for(const item of items){const y=item.transform?.[5]??0;if(previousY!==Infinity&&Math.abs(y-previousY)>3)out+='\\n';out+=(item.str||'')+' ';previousY=y;}
@@ -174,7 +199,7 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
         }
       }finally{if(worker)await worker.terminate();}
       const text=pages.join('\\n');
-      setRaw(text);
+      setRaw(previous=>appendText&&previous.trim()?previous+'\\n'+text:text);
       setMessage(text.trim().length<100?'No usable text detected. Try OCR and choose question pages rather than cover pages.':'Text ready. Inspect OCR accuracy and reading order, then select Detect Questions. Diagrams still require manual verification.');
     }catch(err){setMessage(err instanceof Error?err.message:'Unable to read PDF');}
     finally{setLoading(false);}
@@ -192,14 +217,23 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
       <label className="block rounded-xl border-2 border-dashed p-5 text-center cursor-pointer bg-slate-50">
         <span className="block font-semibold">Upload scanned or text PDF</span>
         <span className="block text-xs text-muted-foreground mt-1">Hindi + English OCR for scanned pages · Two-column reading · Process 1–10 pages at a time</span>
-        <input className="mt-3 block w-full text-sm" type="file" accept="application/pdf,.pdf" disabled={loading} onChange={e=>{const f=e.target.files?.[0];if(f)void readPdf(f);}}/>
+        <input className="mt-3 block w-full text-sm" type="file" accept="application/pdf,.pdf" disabled={loading} onChange={e=>{const f=e.target.files?.[0];if(f){setPdfFile(f);setTotalPages(null);setMessage(`Selected ${f.name}. Choose pages below, then press Scan selected PDF pages.`);}}}/>
       </label>
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="text-sm">Start page <input className="block w-24 rounded border p-2" type="number" min="1" value={startPage} onChange={e=>setStartPage(Math.max(1,Number(e.target.value)||1))}/></label>
-        <label className="text-sm">Pages per batch <input className="block w-24 rounded border p-2" type="number" min="1" max="10" value={pageCount} onChange={e=>setPageCount(Math.min(10,Math.max(1,Number(e.target.value)||1)))}/></label>
-        <label className="text-sm flex items-center gap-2 pb-2"><input type="checkbox" checked={ocrEnabled} onChange={e=>setOcrEnabled(e.target.checked)}/> OCR scanned pages</label>
+      <div className="rounded-xl border p-4 space-y-3">
+        <h3 className="font-semibold">Choose which PDF pages to scan</h3>
+        {totalPages!==null&&<p className="text-sm text-muted-foreground">PDF contains {totalPages} pages.</p>}
+        <div className="flex flex-wrap gap-3 text-sm">
+          {([{value:'range',label:'Start page + number of pages'},{value:'list',label:'Specific pages'},{value:'all',label:'First 10 pages'}] as const).map(mode=><label key={mode.value} className="flex items-center gap-2"><input type="radio" name="pdf-page-mode" checked={pageMode===mode.value} onChange={()=>setPageMode(mode.value)}/>{mode.label}</label>)}
+        </div>
+        {pageMode==='range'&&<div className="flex flex-wrap gap-3">
+          <label className="text-sm">Start page <input className="block w-28 rounded border p-2" type="number" min="1" value={startPage} onChange={e=>setStartPage(Math.max(1,Number(e.target.value)||1))}/></label>
+          <label className="text-sm">How many pages? <input className="block w-28 rounded border p-2" type="number" min="1" max="10" value={pageCount} onChange={e=>setPageCount(Math.min(10,Math.max(1,Number(e.target.value)||1)))}/></label>
+        </div>}
+        {pageMode==='list'&&<label className="block text-sm">Pages (e.g. 2, 5, 8-10)<input className="mt-1 block w-full rounded border p-2" value={pageList} onChange={e=>setPageList(e.target.value)} placeholder="2,5,8-10"/></label>}
+        <label className="text-sm flex items-center gap-2"><input type="checkbox" checked={ocrEnabled} onChange={e=>setOcrEnabled(e.target.checked)}/> Enable Hindi/English OCR for scanned pages</label>
+        <p className="text-xs text-muted-foreground">Maximum 10 PDF pages per batch to reduce mobile memory usage. Repeat batches and enable Append to existing extracted text to combine question pages with later answer pages.</p>
+        <Button type="button" disabled={loading||!pdfFile} onClick={()=>{if(pdfFile)void readPdf(pdfFile);}}>Scan selected PDF pages</Button>
       </div>
-      <p className="text-xs text-amber-700">OCR is processed on your device and may be slow on mobile. Review all answers, Hindi text, and diagrams against the original PDF before importing. The OCR language files download from an external CDN.</p>
       <div className="rounded-xl border bg-slate-50 p-4 space-y-3">
         <div><h3 className="font-semibold">Import screenshots or photographed pages</h3><p className="text-xs text-muted-foreground">Select multiple JPG, PNG, or WebP images. Arrange them in reading order by filename before selecting. Supports inline answers and separate answer-key screenshots.</p></div>
         <input aria-label="Choose book page images" type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={loading} className="block w-full text-sm" onChange={event=>setImages(Array.from(event.target.files||[]).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})).slice(0,12))}/>
