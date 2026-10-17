@@ -150,21 +150,21 @@ export const QuizBuilder: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen w-full min-w-0 bg-background">
       {/* Header */}
-      <div className="border-b bg-gradient-card backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+      <div className="border-b bg-gradient-card backdrop-blur-sm relative sm:sticky sm:top-0 z-30">
+        <div className="w-full mx-auto px-3 sm:px-4 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 min-w-0">
               <div className="p-2 rounded-lg bg-gradient-primary">
                 <Sparkles className="h-6 w-6 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">ArcaneBook</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-foreground">ArcaneBook</h1>
                 <p className="text-sm text-muted-foreground">Professional Quiz Builder</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="text-xs">
                 {questions.length} Question{questions.length !== 1 ? 's' : ''}
               </Badge>
@@ -184,15 +184,15 @@ export const QuizBuilder: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="builder"><Plus className="h-4 w-4 mr-1" />Builder</TabsTrigger>
-            <TabsTrigger value="questions"><FileText className="h-4 w-4 mr-1" />Questions</TabsTrigger>
-            <TabsTrigger value="import"><Upload className="h-4 w-4 mr-1" />Import</TabsTrigger>
-            <TabsTrigger value="settings"><Settings className="h-4 w-4 mr-1" />Settings</TabsTrigger>
-            <TabsTrigger value="preview"><Eye className="h-4 w-4 mr-1" />Preview</TabsTrigger>
-            <TabsTrigger value="tests"><Download className="h-4 w-4 mr-1" />My Tests</TabsTrigger>
+      <div className="w-full min-w-0 mx-auto px-2 sm:px-4 py-4 sm:py-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6 min-w-0">
+          <TabsList className="flex flex-wrap w-full h-auto justify-start gap-1 p-1">
+            <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="builder"><Plus className="h-4 w-4 mr-1" />Builder</TabsTrigger>
+            <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="questions"><FileText className="h-4 w-4 mr-1" />Questions</TabsTrigger>
+            <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="import"><Upload className="h-4 w-4 mr-1" />Import</TabsTrigger>
+            <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="settings"><Settings className="h-4 w-4 mr-1" />Settings</TabsTrigger>
+            <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="preview"><Eye className="h-4 w-4 mr-1" />Preview</TabsTrigger>
+            <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="tests"><Download className="h-4 w-4 mr-1" />My Tests</TabsTrigger>
           </TabsList>
 
           <TabsContent value="builder">
