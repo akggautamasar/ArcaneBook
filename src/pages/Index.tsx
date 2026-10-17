@@ -10,21 +10,21 @@ const Index = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-primary/10">
+    <div className="min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-background via-secondary/20 to-primary/10">
       {/* Header */}
       <div className="relative bg-gradient-to-r from-primary via-primary/80 to-primary">
         <div className="absolute inset-0 bg-white/10 backdrop-blur-sm" />
         <div className="relative max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-wrap justify-between items-center gap-3">
             <div className="flex items-center space-x-3">
               <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
                 <BookOpen className="h-8 w-8 text-white" />
               </div>
-              <h1 className="text-3xl font-bold text-white tracking-tight">
-                Air<span className="text-yellow-300">Book</span>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                Arcane<span className="text-yellow-300">Book</span>
               </h1>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -57,7 +57,7 @@ const Index = () => {
       <div className="relative bg-gradient-to-r from-primary via-primary/80 to-primary pb-8">
         <div className="absolute inset-0 bg-white/10 backdrop-blur-sm" />
         <div className="relative max-w-7xl mx-auto px-4 pt-8 sm:px-6 lg:px-8 text-center space-y-6">
-          <p className="text-xl text-white/90 max-w-3xl mx-auto leading-relaxed">
+          <p className="text-base sm:text-xl text-white/90 max-w-3xl mx-auto leading-relaxed">
             Create professional HTML quiz files with our advanced quiz builder.
             Perfect for educators, trainers, and content creators.
           </p>
@@ -79,7 +79,7 @@ const Index = () => {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-2 py-5 sm:px-6 lg:px-8">
         <QuizBuilder />
       </div>
     </div>
