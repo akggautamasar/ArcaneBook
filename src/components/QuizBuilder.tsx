@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { QuestionForm } from './QuestionForm';
 import { QuestionList } from './QuestionList';
 import { BulkImport } from './BulkImport';
+import { PdfQuestionImport } from './PdfQuestionImport';
 import { QuizSettings } from './QuizSettings';
 import { QuizPreview } from './QuizPreview';
 import { MyTests } from './MyTests';
@@ -190,6 +191,7 @@ export const QuizBuilder: React.FC = () => {
             <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="builder"><Plus className="h-4 w-4 mr-1" />Builder</TabsTrigger>
             <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="questions"><FileText className="h-4 w-4 mr-1" />Questions</TabsTrigger>
             <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="import"><Upload className="h-4 w-4 mr-1" />Import</TabsTrigger>
+            <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="pdf-import"><FileText className="h-4 w-4 mr-1" />PDF Import</TabsTrigger>
             <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="settings"><Settings className="h-4 w-4 mr-1" />Settings</TabsTrigger>
             <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="preview"><Eye className="h-4 w-4 mr-1" />Preview</TabsTrigger>
             <TabsTrigger className="text-xs sm:text-sm px-2 sm:px-3 flex-1 sm:flex-none min-w-[90px]" value="tests"><Download className="h-4 w-4 mr-1" />My Tests</TabsTrigger>
@@ -222,6 +224,14 @@ export const QuizBuilder: React.FC = () => {
             <BulkImport onImport={(imported) => {
               setQuestions(prev => [...prev, ...imported]);
               toast({ title: 'Imported', description: `${imported.length} questions added.` });
+            }} />
+          </TabsContent>
+
+          <TabsContent value="pdf-import">
+            <PdfQuestionImport positive={quizMetadata.defaultPositiveMarks} negative={quizMetadata.defaultNegativeMarks} onImport={imported => {
+              setQuestions(prev => [...prev, ...imported]);
+              toast({ title: 'PDF questions imported', description: `${imported.length} questions added to your question bank.` });
+              setActiveTab('questions');
             }} />
           </TabsContent>
 
