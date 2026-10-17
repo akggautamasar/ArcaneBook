@@ -13,6 +13,10 @@ const MockTests = () => {
   const [tests, setTests] = useState<QuizMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<'newest' | 'questions' | 'title'>('newest');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favorites, setFavorites] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem('arcane-favorites') || '[]'); } catch { return []; } });
+  const toggleFavorite = (id: string) => setFavorites(prev => { const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]; localStorage.setItem('arcane-favorites', JSON.stringify(next)); return next; });
   const [launching, setLaunching] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -49,10 +53,10 @@ const MockTests = () => {
     }
   };
 
-  const filtered = tests.filter(t =>
+  const filtered = tests.filter(t => (!favoritesOnly || favorites.includes(t.id)) && (
     t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     t.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  )).sort((a,b) => sortBy === 'questions' ? b.question_count - a.question_count : sortBy === 'title' ? a.title.localeCompare(b.title) : new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-primary/10">
@@ -76,6 +80,14 @@ const MockTests = () => {
         </div>
       </div>
 
+      <div className="max-w-4xl mx-auto px-4 pt-6 flex flex-wrap items-center gap-3">
+        <label htmlFor="sort-tests" className="text-sm font-medium">Sort tests</label>
+        <select id="sort-tests" className="rounded-md border bg-background p-2 text-sm" value={sortBy} onChange={e => setSortBy(e.target.value as 'newest' | 'questions' | 'title')}>
+          <option value="newest">Newest first</option><option value="questions">Most questions</option><option value="title">Title A–Z</option>
+        </select>
+        <Button size="sm" variant={favoritesOnly ? 'default' : 'outline'} onClick={() => setFavoritesOnly(x => !x)} aria-pressed={favoritesOnly}>★ Favorites ({favorites.length})</Button>
+        <span className="text-sm text-muted-foreground">{filtered.length} tests</span>
+      </div>
       {/* Content */}
       <div className="max-w-4xl mx-auto px-4 py-8">
         {loading ? (
@@ -119,6 +131,7 @@ const MockTests = () => {
                         {formatDistanceToNow(new Date(test.created_at), { addSuffix: true })}
                       </span>
                     </div>
+                    <Button size="sm" variant="ghost" aria-label={favorites.includes(test.id) ? 'Remove favorite' : 'Add favorite'} aria-pressed={favorites.includes(test.id)} onClick={() => toggleFavorite(test.id)}>{favorites.includes(test.id) ? '★' : '☆'}</Button>
                     <Button
                       size="sm"
                       onClick={() => launchQuiz(test)}
