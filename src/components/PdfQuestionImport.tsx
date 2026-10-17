@@ -5,8 +5,9 @@ import { Textarea } from '@/components/ui/textarea';
 import type { Question } from './QuizBuilder';
 
 type Draft = { number: number; set: string; question: Question; answerFound: boolean; source: string; warning: string };
-type PdfJs = { getDocument: (input: { data: Uint8Array; disableWorker: boolean }) => { promise: Promise<{ numPages: number; getPage: (page: number) => Promise<{ getTextContent: () => Promise<{ items: Array<{str?:string;transform?:number[]}> }> }> }> } };
-declare global { interface Window { pdfjsLib?: PdfJs } }
+type PdfJs = { getDocument: (input: { data: Uint8Array; disableWorker: boolean }) => { promise: Promise<{ numPages: number; getPage: (page: number) => Promise<{ getViewport: (opts:{scale:number}) => {width:number;height:number}; render:(opts:{canvasContext:CanvasRenderingContext2D;viewport:{width:number;height:number}})=>{promise:Promise<void>}; getTextContent: () => Promise<{ items: Array<{str?:string;transform?:number[]}> }> }> }> } };
+type OcrWorker = { recognize:(image:HTMLCanvasElement)=>Promise<{data:{text:string}}> ; terminate:()=>Promise<unknown> }; 
+declare global { interface Window { pdfjsLib?: PdfJs; Tesseract?: { createWorker:(langs:string,mode?:number,options?:object)=>Promise<OcrWorker> } } }
 
 function loadPdfJs(): Promise<PdfJs> {
   if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
@@ -17,6 +18,22 @@ function loadPdfJs(): Promise<PdfJs> {
     script.onerror = () => reject(new Error('Could not load PDF reader; check internet access'));
     document.head.appendChild(script);
   });
+}
+async function loadOcr(): Promise<NonNullable<Window['Tesseract']>> {
+  if(window.Tesseract) return window.Tesseract;
+  return new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    script.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    script.onload=()=>window.Tesseract?resolve(window.Tesseract):reject(new Error('OCR library did not initialize'));
+    script.onerror=()=>reject(new Error('Unable to load OCR library. Check internet access.'));
+    document.head.appendChild(script);
+  });
+}
+function renderCrop(canvas:HTMLCanvasElement, x:number, width:number):HTMLCanvasElement {
+  const out=document.createElement('canvas');out.width=width;out.height=canvas.height;
+  const ctx=out.getContext('2d');if(!ctx)throw new Error('Canvas unavailable');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,width,out.height);ctx.drawImage(canvas,x,0,width,canvas.height,0,0,width,canvas.height);
+  return out;
 }
 function extract(text: string, positive: number, negative: number): Draft[] {
   const lines = text.replace(/\r/g,'').split('\n').map(s=>s.trim()).filter(Boolean);
@@ -49,7 +66,7 @@ function extract(text: string, positive: number, negative: number): Draft[] {
     if(q){current={number:Number(q[1]),set,source:line,answerFound:false,warning:'',question:{id:crypto.randomUUID(),questionText:q[2],options:[],correctOptionIndex:0,explanation:'',section:set,positiveMarks:positive,negativeMarks:negative,compText:''}};drafts.push(current);explanation=false;continue;}
     if(!current)continue;
     const answer=answerMatch(line);
-    if(answer){current.question.correctOptionIndex=letter(answer[1]);current.answerFound=true;explanation=false;continue;}
+    if(answer){current.question.correctOptionIndex=letter(answer[1]);current.answerFound=true;explanation=true;const remainder=line.slice(answer[0].length).replace(/^[\\s:.)-]+/,'');if(remainder)current.question.explanation+=remainder+' ';continue;}
     const exp=explanationMatch(line);
     if(exp){explanation=true;current.question.explanation+=exp[1]+' ';continue;}
     const option=optionMatch(line);
@@ -72,6 +89,9 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
   const [raw,setRaw]=useState('');
   const [drafts,setDrafts]=useState<Draft[]>([]);
   const [loading,setLoading]=useState(false);
+  const [ocrEnabled,setOcrEnabled]=useState(true);
+  const [startPage,setStartPage]=useState(1);
+  const [pageCount,setPageCount]=useState(3);
   const [message,setMessage]=useState('');
   const [selected,setSelected]=useState<Record<number,boolean>>({});
   const parse=()=>{const found=extract(raw,positive,negative);setDrafts(found);setSelected({});setMessage(found.length?`Found ${found.length} possible questions. Review before importing.`:'No questions recognized. Try text with numbered questions and (a)-(d) options.');};
@@ -81,15 +101,33 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
       const pdfjs=await loadPdfJs();
       const pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),disableWorker:true}).promise;
       const pages:string[]=[];
-      for(let i=1;i<=pdf.numPages;i++){
-        const page=await pdf.getPage(i), items=(await page.getTextContent()).items;
-        let previousY=Infinity, out='';
-        for(const item of items){const y=item.transform?.[5]??0;if(previousY!==Infinity&&Math.abs(y-previousY)>3)out+='\n';out+=(item.str||'')+' ';previousY=y;}
-        pages.push(out);
-      }
-      const text=pages.join('\n');
+      const begin=Math.min(Math.max(1,startPage),pdf.numPages);
+      const end=Math.min(pdf.numPages,begin+Math.min(10,Math.max(1,pageCount))-1);
+      let worker:OcrWorker|undefined;
+      try{
+        for(let i=begin;i<=end;i++){
+          setMessage(`Processing page ${i} of ${end}…`);
+          const page=await pdf.getPage(i), items=(await page.getTextContent()).items;
+          let previousY=Infinity, out='';
+          for(const item of items){const y=item.transform?.[5]??0;if(previousY!==Infinity&&Math.abs(y-previousY)>3)out+='\\n';out+=(item.str||'')+' ';previousY=y;}
+          if(out.replace(/\\s/g,'').length<80&&ocrEnabled){
+            if(!worker){const tesseract=await loadOcr();setMessage('Downloading Hindi + English OCR language data (first run may take time)…');worker=await tesseract.createWorker('hin+eng');}
+            const viewport=page.getViewport({scale:2.5});
+            const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+            const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering unsupported');
+            await page.render({canvasContext:ctx,viewport}).promise;
+            // Two-column books must be read left-to-right by column, not across both columns.
+            const half=Math.floor(canvas.width/2);
+            const left=await worker.recognize(renderCrop(canvas,0,half));
+            const right=await worker.recognize(renderCrop(canvas,half,canvas.width-half));
+            out=left.data.text+'\\n'+right.data.text;
+          }
+          pages.push('\\n'+out);
+        }
+      }finally{if(worker)await worker.terminate();}
+      const text=pages.join('\\n');
       setRaw(text);
-      setMessage(text.trim().length<100?'This PDF appears scanned/image-only. Text extraction is unavailable here; Hindi OCR and diagram extraction require the upcoming server processing stage.':'PDF text extracted. Check line order, especially two-column pages, then select Detect Questions.');
+      setMessage(text.trim().length<100?'No usable text detected. Try OCR and choose question pages rather than cover pages.':'Text ready. Inspect OCR accuracy and reading order, then select Detect Questions. Diagrams still require manual verification.');
     }catch(err){setMessage(err instanceof Error?err.message:'Unable to read PDF');}
     finally{setLoading(false);}
   };
@@ -104,10 +142,16 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
     <CardHeader><CardTitle>PDF to Mock Test — Review Import</CardTitle><CardDescription>Supports answers immediately after questions, answer keys after a complete set, and separately numbered solutions. Review every result before publishing.</CardDescription></CardHeader>
     <CardContent className="space-y-4 min-w-0">
       <label className="block rounded-xl border-2 border-dashed p-5 text-center cursor-pointer bg-slate-50">
-        <span className="block font-semibold">Choose a PDF to extract text</span>
-        <span className="block text-xs text-muted-foreground mt-1">Text PDFs first · Scanned Hindi books and diagrams require OCR support</span>
+        <span className="block font-semibold">Upload scanned or text PDF</span>
+        <span className="block text-xs text-muted-foreground mt-1">Hindi + English OCR for scanned pages · Two-column reading · Process 1–10 pages at a time</span>
         <input className="mt-3 block w-full text-sm" type="file" accept="application/pdf,.pdf" disabled={loading} onChange={e=>{const f=e.target.files?.[0];if(f)void readPdf(f);}}/>
       </label>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-sm">Start page <input className="block w-24 rounded border p-2" type="number" min="1" value={startPage} onChange={e=>setStartPage(Math.max(1,Number(e.target.value)||1))}/></label>
+        <label className="text-sm">Pages per batch <input className="block w-24 rounded border p-2" type="number" min="1" max="10" value={pageCount} onChange={e=>setPageCount(Math.min(10,Math.max(1,Number(e.target.value)||1)))}/></label>
+        <label className="text-sm flex items-center gap-2 pb-2"><input type="checkbox" checked={ocrEnabled} onChange={e=>setOcrEnabled(e.target.checked)}/> OCR scanned pages</label>
+      </div>
+      <p className="text-xs text-amber-700">OCR is processed on your device and may be slow on mobile. Review all answers, Hindi text, and diagrams against the original PDF before importing. The OCR language files download from an external CDN.</p>
       <p className="text-sm text-muted-foreground" role="status">{loading?'Processing pages…':message}</p>
       <Textarea className="min-h-48 font-mono text-xs" value={raw} onChange={e=>setRaw(e.target.value)} placeholder="Extracted PDF text appears here. You can also paste corrected OCR text. Include numbered questions, (a)-(d) options, inline Answer:/Explanation: or a separate ANSWER KEY."/>
       <Button disabled={loading||!raw.trim()} onClick={parse}>Detect questions and answers</Button>
