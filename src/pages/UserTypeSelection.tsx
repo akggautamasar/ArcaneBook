@@ -1,66 +1,80 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BookOpen, GraduationCap, ShieldCheck, ArrowRight, Trophy, Timer, BarChart3, Sparkles, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { GraduationCap, Settings } from 'lucide-react';
 
-const UserTypeSelection = () => {
+const benefits = [
+  { icon: Timer, title: 'Exam-like practice', text: 'Timed tests and focused question navigation.' },
+  { icon: Trophy, title: 'Instant results', text: 'Understand your score and learn from mistakes.' },
+  { icon: BarChart3, title: 'Track your progress', text: 'Keep improving with every practice session.' },
+];
+
+export default function UserTypeSelection() {
   const navigate = useNavigate();
-
-  const handleStudentAccess = () => {
-    navigate('/mock-tests');
-  };
-
-  const handleAdminAccess = () => {
-    navigate('/password-protected');
-  };
-
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-primary mb-2">Welcome</h1>
-          <p className="text-muted-foreground">Please select your access type</p>
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto max-w-6xl px-5 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 text-xl font-extrabold tracking-tight">
+            <span className="rounded-xl bg-indigo-600 p-2 text-white"><BookOpen className="h-5 w-5" /></span>
+            Arcane<span className="text-indigo-600">Book</span>
+          </div>
+          <Button variant="outline" className="rounded-xl" onClick={() => navigate('/password-protected')}>
+            <ShieldCheck className="mr-2 h-4 w-4" /> Admin login
+          </Button>
         </div>
-        
-        <div className="space-y-4">
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={handleStudentAccess}>
-            <CardHeader className="text-center">
-              <div className="mx-auto mb-2 p-3 bg-primary/10 rounded-full w-fit">
-                <GraduationCap className="h-8 w-8 text-primary" />
+      </header>
+      <main>
+        <section className="relative overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top_right,_rgba(99,102,241,0.13),_transparent_55%)]" />
+          <div className="relative mx-auto max-w-6xl px-5 pt-16 pb-14 sm:pt-24 sm:pb-20 grid items-center gap-12 lg:grid-cols-2">
+            <div className="space-y-7">
+              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700">
+                <Sparkles className="h-4 w-4" /> Your exam preparation workspace
               </div>
-              <CardTitle className="text-xl">Student</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center">
-              <p className="text-muted-foreground mb-4">
-                Access mock tests and practice quizzes
+              <h1 className="text-4xl font-extrabold tracking-tight leading-[1.13] sm:text-5xl lg:text-6xl">
+                Practice smarter.<br /><span className="text-indigo-600">Perform better.</span>
+              </h1>
+              <p className="max-w-lg text-lg leading-relaxed text-slate-600">
+                Prepare with exam-style mock tests, timed practice and detailed answer review — all in one place.
               </p>
-              <Button className="w-full">
-                Continue as Student
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={handleAdminAccess}>
-            <CardHeader className="text-center">
-              <div className="mx-auto mb-2 p-3 bg-secondary/10 rounded-full w-fit">
-                <Settings className="h-8 w-8 text-secondary" />
+              <div className="flex flex-wrap gap-3">
+                <Button size="lg" className="rounded-xl bg-indigo-600 hover:bg-indigo-700 px-7" onClick={() => navigate('/mock-tests')}>
+                  Explore mock tests <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+                <Button size="lg" variant="outline" className="rounded-xl" onClick={() => navigate('/password-protected')}>
+                  Create a test
+                </Button>
               </div>
-              <CardTitle className="text-xl">Admin</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center">
-              <p className="text-muted-foreground mb-4">
-                Create and manage quiz content
-              </p>
-              <Button variant="secondary" className="w-full">
-                Continue as Admin
+              <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600">
+                <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Free practice</span>
+                <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Mobile friendly</span>
+                <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Instant feedback</span>
+              </div>
+            </div>
+            <div className="rounded-[2rem] border border-indigo-100 bg-white p-5 sm:p-7 shadow-2xl shadow-indigo-100/70">
+              <div className="flex items-center justify-between border-b pb-5">
+                <div><p className="text-xs uppercase font-bold tracking-widest text-indigo-600">Student dashboard</p><h2 className="mt-1 text-xl font-bold">Ready for your next test?</h2></div>
+                <div className="rounded-2xl bg-indigo-50 p-3 text-indigo-600"><GraduationCap className="h-7 w-7" /></div>
+              </div>
+              <div className="mt-6 space-y-4">
+                {benefits.map(({ icon: Icon, title, text }) => (
+                  <div key={title} className="flex items-start gap-4 rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                    <div className="rounded-xl bg-white p-3 text-indigo-600 shadow-sm"><Icon className="h-5 w-5" /></div>
+                    <div><h3 className="font-semibold">{title}</h3><p className="mt-1 text-sm text-slate-600">{text}</p></div>
+                  </div>
+                ))}
+              </div>
+              <Button className="mt-6 w-full rounded-xl bg-slate-900 hover:bg-slate-800" size="lg" onClick={() => navigate('/mock-tests')}>
+                Start practicing <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            </div>
+          </div>
+        </section>
+        <section className="border-t border-slate-200 bg-white">
+          <div className="mx-auto max-w-6xl px-5 py-10 text-center text-sm text-slate-500">ArcaneBook · Learn, practice, improve.</div>
+        </section>
+      </main>
     </div>
   );
-};
-
-export default UserTypeSelection;
+}
