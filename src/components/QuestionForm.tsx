@@ -218,8 +218,9 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
             <Input
               id="positiveMarks"
               type="number"
+              step="any"
               value={currentQuestion.positiveMarks}
-              onChange={(e) => handleChange('positiveMarks', parseInt(e.target.value) || 0)}
+              onChange={(e) => handleChange('positiveMarks', Number(e.target.value) || 0)}
               className="bg-background/50"
               min="0"
             />
@@ -230,12 +231,21 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
             <Input
               id="negativeMarks"
               type="number"
+              step="any"
               value={currentQuestion.negativeMarks}
               onChange={(e) => handleChange('negativeMarks', parseInt(e.target.value) || 0)}
               className="bg-background/50"
               min="0"
             />
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-xs text-muted-foreground">Negative marking:</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => handleChange('negativeMarks', 0)}>None</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => handleChange('negativeMarks', Number((currentQuestion.positiveMarks / 4).toFixed(8)))}>1/4</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => handleChange('negativeMarks', Number((currentQuestion.positiveMarks / 3).toFixed(8)))}>1/3</Button>
+          <span className="text-xs text-muted-foreground">Deduction: −{Number(currentQuestion.negativeMarks.toFixed(4))}</span>
         </div>
 
         {/* Explanation */}
