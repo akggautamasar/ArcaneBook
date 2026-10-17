@@ -7,6 +7,39 @@ export function generateHtmlQuiz(questions: Question[], metadata: QuizMetadata):
   return generateClassicTemplate(questions, metadata);
 }
 
+function getExamSkin(template: QuizMetadata['template']): string {
+  if (template === 'classic' || template === 'modern') return '';
+  const color = template === 'exam-green' ? '#13835b' : template === 'exam-minimal' ? '#334155' : '#1565c0';
+  const light = template === 'exam-green' ? '#e9f7f0' : template === 'exam-minimal' ? '#f1f5f9' : '#eaf3ff';
+  return `
+  /* CBT-inspired theme, not affiliated with any examination authority */
+  :root { --primary:${color}; --accent:${color}; --arcane-accent:${color}; }
+  body { background:#f3f5f8 !important; background-image:none !important; color:#1e293b; font-family:Arial,Helvetica,sans-serif; }
+  .header { background:${color} !important; color:white !important; border-radius:0 !important; box-shadow:none; }
+  .header-title,.header-actions,.header .btn { color:white !important; }
+  .header .timer { background:rgba(255,255,255,.17) !important; color:white !important; border:1px solid #ffffff50; }
+  .main-wrapper { gap:14px; }
+  .main-container { background:#fff; border:1px solid #dce3eb; border-radius:4px; }
+  .q-card { background:white !important; border:1px solid #dce3eb !important; border-radius:4px !important; box-shadow:none !important; }
+  .q-header { background:${light} !important; border-bottom:1px solid #dce3eb; }
+  .q-num { background:${color} !important; color:white !important; }
+  .option { border:1px solid #d5dce5 !important; border-radius:4px !important; box-shadow:none !important; }
+  .option.selected { border-color:${color} !important; background:${light} !important; }
+  .option:hover { transform:none; border-color:${color} !important; }
+  .nav-panel { background:white !important; border:1px solid #dce3eb; border-radius:4px !important; box-shadow:none !important; }
+  .panel-header { background:${light} !important; color:#1e293b !important; }
+  .q-nav-btn.active { outline:2px solid ${color}; outline-offset:1px; }
+  .footer { background:white !important; border-top:1px solid #dce3eb; box-shadow:none !important; }
+  .nav-btn,#submit-test { border-radius:4px !important; }
+  .arcane-toolbar { background:${light}; border-color:#d1dbe8; color:#1e293b; border-radius:4px; }
+  .arcane-toolbar button { border-radius:4px; color:${color}; border-color:#cbd5e1; }
+  .arcane-toolbar button[aria-pressed="true"] { background:${color}; color:white; }
+  .results-card { border-radius:6px !important; }
+  ${template === 'exam-minimal' ? '.header { background:#334155 !important; } .q-card { padding:12px !important; } .option { padding:12px !important; }' : ''}
+  @media(max-width:760px){ .main-wrapper{gap:8px;} .main-container{padding:10px;} .header{padding:10px;} .arcane-toolbar{font-size:12px;} }
+  `;
+}
+
 function generateClassicTemplate(questions: Question[], metadata: QuizMetadata): string {
   // Shuffle questions if requested
   let questionsToGenerate = [...questions];
@@ -86,6 +119,7 @@ ${getQuizStyles()}
       .arcane-legend span { padding:5px 8px;background:#f1f5f9;border-radius:7px;color:#334155; }
       .q-nav-btn.arcane-reviewed { outline:3px solid #a855f7;outline-offset:1px; }
       @media(max-width:700px) { .header-title{font-size:16px;} .arcane-toolbar{padding:10px;gap:6px;} .arcane-toolbar button{padding:8px;} .q-card{border-radius:12px;} .footer{padding-bottom:max(10px,env(safe-area-inset-bottom));} }
+${getExamSkin(metadata.template)}
     </style>
 </head>
 <body>
