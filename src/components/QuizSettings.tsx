@@ -97,7 +97,7 @@ export const QuizSettings: React.FC<QuizSettingsProps> = ({ metadata, onUpdate }
                     id="default-positive-marks"
                     type="number"
                     value={metadata.defaultPositiveMarks}
-                    onChange={(e) => handleChange('defaultPositiveMarks', parseInt(e.target.value) || 0)}
+                    onChange={(e) => handleChange('defaultPositiveMarks', Number(e.target.value) || 0)}
                     placeholder="5"
                     className="bg-background/50"
                     min="0"
@@ -112,18 +112,29 @@ export const QuizSettings: React.FC<QuizSettingsProps> = ({ metadata, onUpdate }
                   <Input
                     id="default-negative-marks"
                     type="number"
+                    step="any"
                     value={metadata.defaultNegativeMarks}
-                    onChange={(e) => handleChange('defaultNegativeMarks', parseInt(e.target.value) || 0)}
+                    onChange={(e) => handleChange('defaultNegativeMarks', Number(e.target.value) || 0)}
                     placeholder="1"
                     className="bg-background/50"
                     min="0"
                   />
                   <p className="text-sm text-muted-foreground">
-                    Default marks deducted for wrong answers
+                    Deduction per wrong answer; decimals are supported (e.g. 0.25 or 0.333333).
                   </p>
                 </div>
               </div>
               
+              <div className="rounded-xl border bg-indigo-50/50 p-4 space-y-3">
+                <Label>Quick negative-marking presets</Label>
+                <p className="text-xs text-muted-foreground">Fractions are calculated from the marks awarded for a correct answer. Apply to existing questions separately if needed.</p>
+                <div className="flex flex-wrap gap-2">
+                  {([{label:'No deduction',fraction:0},{label:'1/4 (25%)',fraction:1/4},{label:'1/3 (33.33%)',fraction:1/3},{label:'1/2 (50%)',fraction:1/2}] as const).map(p => (
+                    <button type="button" key={p.label} onClick={() => handleChange('defaultNegativeMarks', Number((metadata.defaultPositiveMarks*p.fraction).toFixed(8)))} className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold hover:border-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600">{p.label}</button>
+                  ))}
+                </div>
+                <p className="text-sm">Example: +{metadata.defaultPositiveMarks} / −{Number(metadata.defaultNegativeMarks.toFixed(4))} per question</p>
+              </div>
               <div className="flex items-center justify-between p-4 border rounded-lg bg-background/30">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
