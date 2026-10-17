@@ -41,7 +41,70 @@ const MockTests = () => {
     setLaunching(quiz.id);
     try {
       const html = await getQuizHtml(quiz.file_id);
-      const blob = new Blob([html], { type: 'text/html' });
+      // Enhance legacy test documents without changing Telegram-stored originals.
+      const companion = `<script>
+(function(){
+  var quizId = ${JSON.stringify(quiz.id)};
+  var key = 'arcane-attempt-' + quizId;
+  var historyKey = 'arcane-history';
+  function read(k,fallback){try{return JSON.parse(localStorage.getItem(k)||'null')||fallback;}catch(e){return fallback;}}
+  function save(){if(typeof test==='undefined'||test.submitted)return;
+    try{localStorage.setItem(key,JSON.stringify({answers:test.answers,current:test.current,at:Date.now()}));}catch(e){}
+    refresh();
+  }
+  function refresh(){if(typeof test==='undefined')return;
+    var count=Object.keys(test.answers||{}).length;
+    var status=document.getElementById('arcane-status');
+    if(status)status.textContent=count+' / '+test.questions+' answered';
+  }
+  function boot(){
+    if(typeof test==='undefined'||typeof showQuestion!=='function')return;
+    var state=read(key,null);
+    if(state&&state.answers&&!test.submitted){
+      test.answers=state.answers;
+      Object.keys(test.answers).forEach(function(id){
+        var card=document.getElementById('q'+id);
+        if(!card)return;
+        var selected=card.querySelector('.option[data-option="'+test.answers[id]+'"]');
+        if(selected)selected.classList.add('selected');
+      });
+      if(typeof updateNavigation==='function')updateNavigation();
+      showQuestion(state.current||1);
+    }
+    var bar=document.createElement('div');
+    bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','Exam companion');
+    bar.style.cssText='position:fixed;bottom:12px;left:12px;z-index:99999;background:#172554;color:white;padding:10px 12px;border-radius:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font:13px system-ui;box-shadow:0 4px 24px #0004;max-width:calc(100vw - 24px)';
+    bar.innerHTML='<strong id="arcane-status"></strong><button type="button" id="arcane-fs">Full screen</button><button type="button" id="arcane-reset">Restart</button>';
+    document.body.appendChild(bar);
+    Array.from(bar.querySelectorAll('button')).forEach(function(b){b.style.cssText='padding:6px 9px;border-radius:6px;background:white;color:#172554;border:0;font-weight:600'});
+    document.getElementById('arcane-fs').onclick=function(){if(document.fullscreenElement)document.exitFullscreen();else if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(function(){});};
+    document.getElementById('arcane-reset').onclick=function(){if(confirm('Restart this attempt and clear saved answers?')){localStorage.removeItem(key);location.reload();}};
+    document.addEventListener('click',function(e){if(e.target.closest('.option,.q-nav-btn,#next-btn,#prev-btn'))setTimeout(save,80);});
+    window.addEventListener('beforeunload',save);
+    var oldSubmit=window.submitTest;
+    if(typeof oldSubmit==='function')window.submitTest=function(){
+      oldSubmit.apply(this,arguments);
+      if(test.submitted){
+        localStorage.removeItem(key);
+        var correct=0,incorrect=0,score=0;
+        Object.keys(test.correct||{}).forEach(function(id){
+          if(test.answers[id]===undefined)return;
+          if(test.answers[id]===test.correct[id]){correct++;score+=(test.marks[id]||{}).positive||0;}
+          else{incorrect++;score-=(test.marks[id]||{}).negative||0;}
+        });
+        var history=read(historyKey,[]);
+        history.unshift({id:quizId,title:document.title,date:new Date().toISOString(),correct:correct,incorrect:incorrect,unattempted:test.questions-correct-incorrect,score:Math.max(0,score),seconds:test.timeSpent||0});
+        try{localStorage.setItem(historyKey,JSON.stringify(history.slice(0,100)));}catch(e){}
+      }
+    };
+    document.addEventListener('keydown',function(e){if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();showQuestion(test.current+(e.key==='ArrowRight'?1:-1));}});
+    refresh();setInterval(save,10000);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,0);});else setTimeout(boot,0);
+})();
+<\/script>`;
+      const enhancedHtml = html.includes('</body>') ? html.replace('</body>', companion + '</body>') : html;
+      const blob = new Blob([enhancedHtml], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
       // Clean up after a delay
