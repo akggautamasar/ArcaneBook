@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Settings2, Clock, Shuffle, FileText, Palette } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { QuizMetadata } from './QuizBuilder';
 
 interface QuizSettingsProps {
@@ -20,8 +19,8 @@ export const QuizSettings: React.FC<QuizSettingsProps> = ({ metadata, onUpdate }
   };
 
   return (
-    <div className="space-y-6">
-      <Card className="bg-gradient-card border-card-border shadow-glass">
+    <div className="space-y-6 min-w-0">
+      <Card className="w-full min-w-0 bg-gradient-card border-card-border shadow-glass">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings2 className="h-5 w-5" />
@@ -135,7 +134,7 @@ export const QuizSettings: React.FC<QuizSettingsProps> = ({ metadata, onUpdate }
                 </div>
                 <p className="text-sm">Example: +{metadata.defaultPositiveMarks} / −{Number(metadata.defaultNegativeMarks.toFixed(4))} per question</p>
               </div>
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-background/30">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 border rounded-lg bg-background/30">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <Shuffle className="h-4 w-4" />
@@ -167,18 +166,25 @@ export const QuizSettings: React.FC<QuizSettingsProps> = ({ metadata, onUpdate }
             
             <div className="space-y-2">
               <Label htmlFor="template-select">Quiz Template</Label>
-              <Select value={metadata.template} onValueChange={(value: QuizMetadata['template']) => handleChange('template', value)}>
-                <SelectTrigger className="bg-background/50">
-                  <SelectValue placeholder="Select a template" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="classic">Classic - Traditional quiz layout</SelectItem>
-                  <SelectItem value="modern">Modern - Gradient design with smooth animations</SelectItem>
-                  <SelectItem value="exam-blue">Exam Blue - Government CBT-inspired screen</SelectItem>
-                  <SelectItem value="exam-green">Exam Green - Recruitment CBT-inspired screen</SelectItem>
-                  <SelectItem value="exam-minimal">Exam Minimal - Distraction-free exam screen</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label="Quiz template">
+                {([
+                  {value:'classic',label:'Classic',description:'Traditional question layout',accent:'bg-indigo-600'},
+                  {value:'modern',label:'Modern',description:'Gradient interface with animations',accent:'bg-violet-600'},
+                  {value:'exam-blue',label:'Exam Blue',description:'Blue government CBT-inspired screen',accent:'bg-blue-700'},
+                  {value:'exam-green',label:'Exam Green',description:'Green recruitment CBT-inspired screen',accent:'bg-emerald-700'},
+                  {value:'exam-minimal',label:'Exam Minimal',description:'Distraction-free examination screen',accent:'bg-slate-600'},
+                ] as const).map(t => (
+                  <button key={t.value} type="button" role="radio" aria-checked={metadata.template === t.value}
+                    onClick={() => handleChange('template', t.value)}
+                    className={`w-full min-w-0 rounded-xl border-2 p-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${metadata.template === t.value ? 'border-indigo-600 bg-indigo-50' : 'border-slate-200 bg-white hover:border-indigo-300'}`}>
+                    <span className="flex items-center gap-3">
+                      <span className={`h-9 w-11 shrink-0 rounded-md ${t.accent} flex items-center justify-center text-white text-xs font-bold`}>Q 01</span>
+                      <span className="min-w-0 flex-1"><span className="block font-semibold text-slate-900">{t.label}</span><span className="block text-xs text-slate-600">{t.description}</span></span>
+                      <span className={`h-5 w-5 shrink-0 rounded-full border-2 flex items-center justify-center ${metadata.template === t.value ? 'border-indigo-600' : 'border-slate-300'}`}>{metadata.template === t.value && <span className="h-2.5 w-2.5 rounded-full bg-indigo-600" />}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
               <p className="text-sm text-muted-foreground">
                 Choose from five layouts. Exam-inspired layouts are independent recreations, not official exam portals.
               </p>
