@@ -35,6 +35,42 @@ function renderCrop(canvas:HTMLCanvasElement, x:number, width:number):HTMLCanvas
   ctx.fillStyle='#fff';ctx.fillRect(0,0,width,out.height);ctx.drawImage(canvas,x,0,width,canvas.height,0,0,width,canvas.height);
   return out;
 }
+async function recognizeImages(files: File[], onProgress:(message:string)=>void):Promise<string> {
+  const ocr=await loadOcr();
+  onProgress('Loading Hindi and English OCR models…');
+  const worker=await ocr.createWorker('hin+eng');
+  const results:string[]=[];
+  try {
+    for(let index=0;index<files.length;index++){
+      const file=files[index];
+      onProgress(`Reading screenshot ${index+1} of ${files.length}: ${file.name}`);
+      const bitmap=await createImageBitmap(file);
+      try {
+        const maxWidth=2200;
+        const scale=Math.min(1,maxWidth/bitmap.width);
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.round(bitmap.width*scale);
+        canvas.height=Math.round(bitmap.height*scale);
+        const context=canvas.getContext('2d');
+        if(!context)throw new Error('Image canvas unavailable');
+        context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);
+        context.drawImage(bitmap,0,0,canvas.width,canvas.height);
+        // OCR the left and right columns independently on landscape / wide pages.
+        const twoColumns=canvas.width/canvas.height>0.72 && canvas.width>=950;
+        if(twoColumns){
+          const half=Math.floor(canvas.width/2);
+          const left=await worker.recognize(renderCrop(canvas,0,half));
+          const right=await worker.recognize(renderCrop(canvas,half,canvas.width-half));
+          results.push(left.data.text+'\\n'+right.data.text);
+        }else{
+          const result=await worker.recognize(canvas);
+          results.push(result.data.text);
+        }
+      }finally{bitmap.close();}
+    }
+    return results.join('\\n');
+  }finally{await worker.terminate();}
+}
 function extract(text: string, positive: number, negative: number): Draft[] {
   const lines = text.replace(/\r/g,'').split('\n').map(s=>s.trim()).filter(Boolean);
   const drafts: Draft[] = [];
@@ -90,11 +126,23 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
   const [drafts,setDrafts]=useState<Draft[]>([]);
   const [loading,setLoading]=useState(false);
   const [ocrEnabled,setOcrEnabled]=useState(true);
+  const [images,setImages]=useState<File[]>([]);
+  const [appendText,setAppendText]=useState(false);
   const [startPage,setStartPage]=useState(1);
   const [pageCount,setPageCount]=useState(3);
   const [message,setMessage]=useState('');
   const [selected,setSelected]=useState<Record<number,boolean>>({});
   const parse=()=>{const found=extract(raw,positive,negative);setDrafts(found);setSelected({});setMessage(found.length?`Found ${found.length} possible questions. Review before importing.`:'No questions recognized. Try text with numbered questions and (a)-(d) options.');};
+  const readImages=async()=>{
+    if(!images.length)return;
+    setLoading(true);setDrafts([]);
+    try{
+      const text=await recognizeImages(images,setMessage);
+      setRaw(previous=>appendText&&previous.trim()?previous+'\\n'+text:text);
+      setMessage(`Processed ${images.length} screenshot(s). Review the OCR text, then detect questions and answers. Missing figures require manual handling.`);
+    }catch(error){setMessage(error instanceof Error?error.message:'Unable to process screenshots');}
+    finally{setLoading(false);}
+  };
   const readPdf=async(file:File)=>{
     setLoading(true);setMessage('Reading PDF text...');
     try{
@@ -152,6 +200,13 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
         <label className="text-sm flex items-center gap-2 pb-2"><input type="checkbox" checked={ocrEnabled} onChange={e=>setOcrEnabled(e.target.checked)}/> OCR scanned pages</label>
       </div>
       <p className="text-xs text-amber-700">OCR is processed on your device and may be slow on mobile. Review all answers, Hindi text, and diagrams against the original PDF before importing. The OCR language files download from an external CDN.</p>
+      <div className="rounded-xl border bg-slate-50 p-4 space-y-3">
+        <div><h3 className="font-semibold">Import screenshots or photographed pages</h3><p className="text-xs text-muted-foreground">Select multiple JPG, PNG, or WebP images. Arrange them in reading order by filename before selecting. Supports inline answers and separate answer-key screenshots.</p></div>
+        <input aria-label="Choose book page images" type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={loading} className="block w-full text-sm" onChange={event=>setImages(Array.from(event.target.files||[]).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})).slice(0,12))}/>
+        {images.length>0&&<div className="text-xs text-slate-700">Selected: {images.map(file=>file.name).join(', ')}</div>}
+        <label className="flex gap-2 items-center text-sm"><input type="checkbox" checked={appendText} onChange={event=>setAppendText(event.target.checked)}/> Append to existing extracted text (for separate answer pages)</label>
+        <Button type="button" disabled={loading||images.length===0} onClick={()=>void readImages()}>Extract questions from {images.length||''} image{images.length===1?'':'s'}</Button>
+      </div>
       <p className="text-sm text-muted-foreground" role="status">{loading?'Processing pages…':message}</p>
       <Textarea className="min-h-48 font-mono text-xs" value={raw} onChange={e=>setRaw(e.target.value)} placeholder="Extracted PDF text appears here. You can also paste corrected OCR text. Include numbered questions, (a)-(d) options, inline Answer:/Explanation: or a separate ANSWER KEY."/>
       <Button disabled={loading||!raw.trim()} onClick={parse}>Detect questions and answers</Button>
