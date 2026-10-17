@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: airbook-quiz
+    runtime: node
+    buildCommand: npm install --legacy-peer-deps && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PORT
+        value: 10000
+      - key: VITE_TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: VITE_TELEGRAM_CHANNEL_ID
+        sync: false
+      - key: VITE_MASTER_PASSWORD
+        sync: false
+    healthCheckPath: /
+    autoDeploy: true

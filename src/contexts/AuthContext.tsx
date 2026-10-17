@@ -1,0 +1,8 @@
+import {createContext,useContext,useState,useEffect,type ReactNode} from 'react';
+interface AuthContextType {isAuthenticated:boolean;loading:boolean;signIn:(password:string)=>Promise<{error?:string}>;signOut:()=>Promise<void>;isMaster:boolean;changeAccessPassword:(password:string)=>void;accessPassword:string;}
+const AuthContext=createContext<AuthContextType|undefined>(undefined);
+export const useAuth=()=>{const ctx=useContext(AuthContext);if(!ctx)throw Error('useAuth must be used within AuthProvider');return ctx;};
+export const AuthProvider=({children}:{children:ReactNode})=>{const [isAuthenticated,setAuthenticated]=useState(false);const [loading,setLoading]=useState(true);useEffect(()=>{fetch('/api?action=session',{credentials:'same-origin'}).then(r=>r.json()).then(j=>setAuthenticated(j.authenticated===true)).catch(()=>setAuthenticated(false)).finally(()=>setLoading(false));},[]);
+const signIn=async(password:string)=>{try{const r=await fetch('/api?action=login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({password})});if(!r.ok)return {error:'Invalid password or server unavailable'};setAuthenticated(true);return {};}catch{return {error:'Unable to connect to server'};}};
+const signOut=async()=>{try{await fetch('/api?action=logout',{method:'POST',credentials:'same-origin'});}finally{setAuthenticated(false);}};
+return <AuthContext.Provider value={{isAuthenticated,loading,signIn,signOut,isMaster:false,changeAccessPassword:()=>{throw Error('Change ADMIN_PASSWORD in Vercel environment settings')},accessPassword:''}}>{children}</AuthContext.Provider>;};
