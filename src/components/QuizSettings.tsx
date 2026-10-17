@@ -167,17 +167,20 @@ export const QuizSettings: React.FC<QuizSettingsProps> = ({ metadata, onUpdate }
             
             <div className="space-y-2">
               <Label htmlFor="template-select">Quiz Template</Label>
-              <Select value={metadata.template} onValueChange={(value: 'classic' | 'modern') => handleChange('template', value)}>
+              <Select value={metadata.template} onValueChange={(value: QuizMetadata['template']) => handleChange('template', value)}>
                 <SelectTrigger className="bg-background/50">
                   <SelectValue placeholder="Select a template" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="classic">Classic - Traditional quiz layout</SelectItem>
                   <SelectItem value="modern">Modern - Gradient design with smooth animations</SelectItem>
+                  <SelectItem value="exam-blue">Exam Blue - Government CBT-inspired screen</SelectItem>
+                  <SelectItem value="exam-green">Exam Green - Recruitment CBT-inspired screen</SelectItem>
+                  <SelectItem value="exam-minimal">Exam Minimal - Distraction-free exam screen</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-sm text-muted-foreground">
-                Choose the visual theme for your quiz HTML file
+                Choose from five layouts. Exam-inspired layouts are independent recreations, not official exam portals.
               </p>
             </div>
           </div>
@@ -202,7 +205,7 @@ export const QuizSettings: React.FC<QuizSettingsProps> = ({ metadata, onUpdate }
                  </span>
                  <span className="flex items-center gap-1">
                    <Palette className="h-3 w-3" />
-                   {metadata.template === 'classic' ? 'Classic' : 'Modern'} template
+                   {({classic:'Classic',modern:'Modern','exam-blue':'Exam Blue','exam-green':'Exam Green','exam-minimal':'Exam Minimal'} as const)[metadata.template]} template
                  </span>
                  {metadata.shuffleQuestions && (
                    <span className="flex items-center gap-1">
