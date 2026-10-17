@@ -69,6 +69,23 @@ function generateClassicTemplate(questions: Question[], metadata: QuizMetadata):
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.min.js"></script>
     <style>
 ${getQuizStyles()}
+      /* ArcaneBook exam workspace refresh */
+      :root { --arcane-accent:#4f46e5; }
+      body { font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+      .header { box-shadow:0 2px 16px rgba(15,23,42,.09); }
+      .header-title { font-weight:800; letter-spacing:-.035em; }
+      .q-card { border-radius:18px; box-shadow:0 6px 24px rgba(15,23,42,.06); }
+      .option { border-radius:12px; transition:background .15s,border-color .15s,transform .15s; }
+      .option:hover { transform:translateY(-1px); }
+      .nav-panel { border-radius:16px; }
+      .footer { box-shadow:0 -3px 16px rgba(15,23,42,.08); }
+      .arcane-toolbar { display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 16px;margin:0 0 18px;background:#eef2ff;color:#312e81;border:1px solid #c7d2fe;border-radius:14px;font:600 13px system-ui; }
+      .arcane-toolbar button { background:white;color:#3730a3;border:1px solid #a5b4fc;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:700; }
+      .arcane-toolbar button[aria-pressed="true"] { background:#7c3aed;color:white;border-color:#7c3aed; }
+      .arcane-legend { display:flex;flex-wrap:wrap;gap:8px;font:600 12px system-ui;padding:10px 0; }
+      .arcane-legend span { padding:5px 8px;background:#f1f5f9;border-radius:7px;color:#334155; }
+      .q-nav-btn.arcane-reviewed { outline:3px solid #a855f7;outline-offset:1px; }
+      @media(max-width:700px) { .header-title{font-size:16px;} .arcane-toolbar{padding:10px;gap:6px;} .arcane-toolbar button{padding:8px;} .q-card{border-radius:12px;} .footer{padding-bottom:max(10px,env(safe-area-inset-bottom));} }
     </style>
 </head>
 <body>
@@ -95,6 +112,14 @@ ${getQuizStyles()}
     <div class="main-wrapper">
         <div class="main-container">
             <p class="text-center text-gray-600 mb-4">${metadata.description}</p>
+            <div class="arcane-toolbar" role="toolbar" aria-label="Exam controls">
+              <span id="arcane-progress" aria-live="polite">0 answered</span>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <button type="button" id="arcane-review" onclick="arcaneToggleReview()" aria-pressed="false">☆ Mark for review</button>
+                <button type="button" onclick="arcaneClearAnswer()">Clear answer</button>
+                <button type="button" onclick="arcaneFullscreen()">Full screen</button>
+              </div>
+            </div>
             <div id="questions-container">
                 ${questionsHtml}
             </div>
@@ -113,6 +138,9 @@ ${getQuizStyles()}
                 <option value="0">Test</option>
             </select>
             
+            <div class="arcane-legend" aria-label="Question status legend">
+              <span>● Answered</span><span>○ Unanswered</span><span>☆ Marked for review</span>
+            </div>
             <div class="q-grid" id="q-grid">
                 <!-- Question navigation buttons will be added dynamically -->
             </div>
@@ -156,6 +184,54 @@ ${getQuizStyles()}
     
     <script>
 ${getQuizScript(questionsToGenerate, metadata, qMap, correctAnswers, marksData)}
+      // Exam UI enhancements are isolated from question content and scoring.
+      const arcaneReview = new Set();
+      function arcaneRefresh() {
+        const answered = Object.keys(test.answers).length;
+        const label = document.getElementById('arcane-progress');
+        if (label) label.textContent = answered + ' / ' + test.questions + ' answered · ' + arcaneReview.size + ' marked';
+        const id = test.qMap[test.current] && test.qMap[test.current].id;
+        const reviewButton = document.getElementById('arcane-review');
+        if (reviewButton) {
+          const marked = arcaneReview.has(id);
+          reviewButton.setAttribute('aria-pressed', String(marked));
+          reviewButton.textContent = marked ? '★ Marked for review' : '☆ Mark for review';
+        }
+        document.querySelectorAll('.q-nav-btn').forEach((button, index) => {
+          const question = test.qMap[index + 1];
+          button.classList.toggle('arcane-reviewed', !!question && arcaneReview.has(question.id));
+          if (question) button.title = 'Question ' + (index + 1) + (arcaneReview.has(question.id) ? ' - marked for review' : '');
+        });
+      }
+      function arcaneToggleReview() {
+        if (test.submitted) return;
+        const question = test.qMap[test.current];
+        if (!question) return;
+        if (arcaneReview.has(question.id)) arcaneReview.delete(question.id);
+        else arcaneReview.add(question.id);
+        arcaneRefresh();
+      }
+      function arcaneClearAnswer() {
+        const question = test.qMap[test.current];
+        if (question && !test.submitted) clearSelection(question.id);
+        arcaneRefresh();
+      }
+      function arcaneFullscreen() {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+      }
+      document.addEventListener('click', event => {
+        if (event.target.closest('.option,.q-nav-btn,.nav-btn')) setTimeout(arcaneRefresh, 0);
+      });
+      document.addEventListener('keydown', event => {
+        if (/INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+          event.preventDefault();
+          showQuestion(test.current + (event.key === 'ArrowRight' ? 1 : -1));
+          arcaneRefresh();
+        }
+      });
+      document.addEventListener('DOMContentLoaded', arcaneRefresh);
     </script>
 </body>
 </html>`;
@@ -1259,10 +1335,10 @@ function updateNavigation() {
 }
 
 // Submit test
-function submitTest() {
+function submitTest(force = false) {
     if (test.submitted) return;
     
-    if (!window.confirm('Are you sure you want to submit the test?')) return;
+    if (!force && !window.confirm('Are you sure you want to submit the test?')) return;
     
     test.submitted = true;
     
@@ -1333,7 +1409,7 @@ function startTimer() {
         
         if (timeLeft <= 0) {
             clearInterval(interval);
-            submitTest();
+            submitTest(true);
             return;
         }
         
