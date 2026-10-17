@@ -62,6 +62,10 @@ export const QuizBuilder: React.FC = () => {
       toast({ title: 'Validation Error', description: 'Fill in all question text and options.', variant: 'destructive' });
       return;
     }
+    if (!Number.isFinite(currentQuestion.positiveMarks) || !Number.isFinite(currentQuestion.negativeMarks) || currentQuestion.positiveMarks < 0 || currentQuestion.negativeMarks < 0) {
+      toast({ title: 'Invalid marks', description: 'Marks must be valid non-negative numbers.', variant: 'destructive' });
+      return;
+    }
     if (isEditing && editIndex !== null) {
       setQuestions(prev => prev.map((q, i) => i === editIndex ? { ...currentQuestion, id: q.id } : q));
       toast({ title: 'Updated', description: 'Question updated successfully!' });
