@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { BookOpen, Clock, Search, Play, Award, Loader2 } from 'lucide-react';
+import { BookOpen, Clock, Search, Play, Award, Loader2, ArrowLeft, Sparkles, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -122,20 +122,20 @@ const MockTests = () => {
   )).sort((a,b) => sortBy === 'questions' ? b.question_count - a.question_count : sortBy === 'title' ? a.title.localeCompare(b.title) : new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-primary/10">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-primary via-primary/80 to-primary py-12 px-4">
-        <div className="max-w-4xl mx-auto text-center space-y-4">
+      <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-indigo-800 py-12 sm:py-16 px-4">
+        <div className="max-w-6xl mx-auto text-center space-y-4">
           <div className="flex items-center justify-center gap-3 mb-4">
             <BookOpen className="h-10 w-10 text-white" />
-            <h1 className="text-4xl font-bold text-white">Mock Tests</h1>
+            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white">Mock Test Library</h1>
           </div>
-          <p className="text-white/80 text-lg">Practice and sharpen your skills</p>
-          <div className="relative max-w-md mx-auto mt-6">
+          <p className="text-indigo-100 text-lg max-w-xl mx-auto">Choose a test, challenge yourself and review your performance. Your preparation starts here.</p>
+          <div className="relative max-w-xl mx-auto mt-7">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              className="pl-10 bg-white/90"
-              placeholder="Search tests..."
+              className="pl-10 bg-white text-slate-900 h-12 rounded-xl border-0 shadow-lg"
+              placeholder="Search mock tests by title or description..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -143,16 +143,16 @@ const MockTests = () => {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 pt-6 flex flex-wrap items-center gap-3">
-        <label htmlFor="sort-tests" className="text-sm font-medium">Sort tests</label>
+      <div className="max-w-6xl mx-auto px-4 pt-7 flex flex-wrap items-center gap-3">
+        <SlidersHorizontal className="h-4 w-4 text-slate-500" /><label htmlFor="sort-tests" className="text-sm font-medium">Sort by</label>
         <select id="sort-tests" className="rounded-md border bg-background p-2 text-sm" value={sortBy} onChange={e => setSortBy(e.target.value as 'newest' | 'questions' | 'title')}>
           <option value="newest">Newest first</option><option value="questions">Most questions</option><option value="title">Title A–Z</option>
         </select>
         <Button size="sm" variant={favoritesOnly ? 'default' : 'outline'} onClick={() => setFavoritesOnly(x => !x)} aria-pressed={favoritesOnly}>★ Favorites ({favorites.length})</Button>
-        <span className="text-sm text-muted-foreground">{filtered.length} tests</span>
+        <span className="ml-auto rounded-full bg-indigo-50 border border-indigo-100 px-3 py-1.5 text-sm font-semibold text-indigo-700">{filtered.length} tests available</span>
       </div>
       {/* Content */}
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-8">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -171,11 +171,11 @@ const MockTests = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map(test => (
-              <Card key={test.id} className="hover:shadow-lg transition-all duration-200 group">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base group-hover:text-primary transition-colors">
+              <Card key={test.id} className="rounded-2xl border-slate-200 bg-white hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-100 transition-all duration-200 group">
+                <CardHeader className="pb-3 space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-1.5">Mock Test</span><Sparkles className="h-4 w-4 text-indigo-400" /></div>
+                  <CardTitle className="text-lg font-bold group-hover:text-indigo-600 transition-colors">
                     {test.title}
                   </CardTitle>
                   {test.description && (
@@ -184,7 +184,7 @@ const MockTests = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center justify-between">
-                    <div className="flex gap-3 text-sm text-muted-foreground">
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <BookOpen className="h-3.5 w-3.5" />
                         {test.question_count} Qs
@@ -214,7 +214,7 @@ const MockTests = () => {
         )}
 
         <div className="text-center mt-8">
-          <Button variant="outline" onClick={() => navigate('/')}>← Back to Home</Button>
+          <Button variant="outline" className="rounded-xl" onClick={() => navigate('/')}><ArrowLeft className="mr-2 h-4 w-4" /> Back to Home</Button>
         </div>
       </div>
     </div>
