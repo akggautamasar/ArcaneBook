@@ -34,7 +34,7 @@ export interface QuizMetadata {
   shuffleQuestions: boolean;
   defaultPositiveMarks: number;
   defaultNegativeMarks: number;
-  template: 'classic' | 'modern';
+  template: 'classic' | 'modern' | 'exam-blue' | 'exam-green' | 'exam-minimal';
 }
 
 export const QuizBuilder: React.FC = () => {
