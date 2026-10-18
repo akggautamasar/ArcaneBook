@@ -3084,8 +3084,8 @@ function generateRrbCbtTemplate(questions: Question[], metadata: QuizMetadata): 
     positive:q.positiveMarks,negative:q.negativeMarks,explanation:q.explanation||''
   }))).replace(/</g,'\\u003c');
   const duration=Math.max(0,Number(metadata.timerDuration)||0)*60;
-  return \`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>\${safe(metadata.title)} — RRB-style Practice</title>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${safe(metadata.title)} — RRB-style Practice</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font:14px Arial,Helvetica,sans-serif;color:#1c2535;background:#fff}
 button,select{font:inherit;cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid #2563eb;outline-offset:2px}
@@ -3113,9 +3113,9 @@ button.primary{background:#37a34a;color:#fff;border-color:#37a34a}button.submit{
 #result{display:none;max-width:900px;margin:25px auto;padding:24px}#reviewAnswers>div{padding:15px;border-bottom:1px solid #e2e8f0}
 @media(max-width:720px){.layout{display:block}aside{border-left:0;border-top:1px solid #b9c9de}#questionArea{min-height:40vh}header{padding:10px}.actions{position:sticky;bottom:0;z-index:2}#palette{grid-template-columns:repeat(8,minmax(0,1fr))}.legend{grid-template-columns:repeat(2,1fr)}}
 </style></head><body>
-<header><strong>\${safe(metadata.title)}</strong><span>ArcaneBook · RRB-style practice</span></header>
+<header><strong>${safe(metadata.title)}</strong><span>ArcaneBook · RRB-style practice</span></header>
 <section id="instructions"><h2>Please read the instructions carefully</h2><h3>General Instructions</h3>
-<ol><li>Total duration: <b>\${safe(metadata.timerDuration)} minutes</b>.</li><li>Number of questions: <b>\${ordered.length}</b>.</li>
+<ol><li>Total duration: <b>${safe(metadata.timerDuration)} minutes</b>.</li><li>Number of questions: <b>${ordered.length}</b>.</li>
 <li>Each question has four options; select one answer.</li><li>Correct and incorrect answer marks follow the settings of each question.</li>
 <li>Use <b>Save & Next</b> to record your answer and proceed.</li><li>Use <b>Mark for Review & Next</b> to flag a question for later review.</li>
 <li>The question palette indicates Not Visited (grey), Not Answered (orange), Answered (green), Review (purple), and Answered & Review (purple with tick).</li>
@@ -3136,7 +3136,7 @@ button.primary{background:#37a34a;color:#fff;border-color:#37a34a}button.submit{
 <div id="counts"></div><hr><nav id="palette" aria-label="Question palette"></nav></aside></div></section>
 <section id="result"><h2>Test Result</h2><div id="score"></div><h3>Question-wise review</h3><div id="reviewAnswers"></div></section>
 <script>
-const questions=\${payload};const duration=\${duration};
+const questions=${payload};const duration=${duration};
 const answers=Array(questions.length).fill(null),visited=Array(questions.length).fill(false),review=Array(questions.length).fill(false);
 let current=0,remaining=duration,finished=false,ticker=null;
 const el=id=>document.getElementById(id);
@@ -3161,5 +3161,5 @@ el('previous').onclick=()=>go(current-1);
 el('save').onclick=()=>go(Math.min(current+1,questions.length-1));
 el('mark').onclick=()=>{review[current]=true;go(Math.min(current+1,questions.length-1))};
 el('submit').onclick=finish;
-</script></body></html>\`;
+</script></body></html>`;
 }
