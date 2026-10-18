@@ -1,11 +1,12 @@
 import type { Question, QuizMetadata } from '@/components/QuizBuilder';
 
 export function generateHtmlQuiz(questions: Question[], metadata: QuizMetadata): string {
-  if (metadata.template === 'rrb-cbt') return generateRrbCbtTemplate(questions, metadata);
+  const prepared=questions.map(q=>q.questionImage?{...q,questionText:`<img src="${q.questionImage}" alt="Question image" style="max-width:100%;height:auto;display:block" />`}:q);
+  if (metadata.template === 'rrb-cbt') return generateRrbCbtTemplate(prepared, metadata);
   if (metadata.template === 'modern') {
-    return generateModernTemplate(questions, metadata);
+    return generateModernTemplate(prepared, metadata);
   }
-  return generateClassicTemplate(questions, metadata);
+  return generateClassicTemplate(prepared, metadata);
 }
 
 function getExamSkin(template: QuizMetadata['template']): string {
@@ -3079,7 +3080,7 @@ function generateRrbCbtTemplate(questions: Question[], metadata: QuizMetadata): 
   const safe=(v:unknown)=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   const ordered=metadata.shuffleQuestions?shuffleArray([...questions]):questions;
   const payload=JSON.stringify(ordered.map(q=>({
-    id:q.id,section:q.section||'General',text:q.questionText,comp:q.compText||'',
+    id:q.id,section:q.section||'General',text:q.questionImage?'':q.questionText,image:q.questionImage||'',comp:q.compText||'',
     options:q.options,images:q.optionImages||[],answer:q.correctOptionIndex,
     positive:q.positiveMarks,negative:q.negativeMarks,explanation:q.explanation||''
   }))).replace(/</g,'\\u003c');
@@ -3145,7 +3146,7 @@ function status(i){if(review[i])return answers[i]===null?'review':'reviewanswere
 function navButton(i){const b=document.createElement('button');b.textContent=i+1;b.className='status '+status(i)+(i===current?' active':'');b.setAttribute('aria-label','Question '+(i+1));b.onclick=()=>go(i);return b}
 function palette(){for(const id of ['palette','topNumbers']){const root=el(id);root.replaceChildren();questions.forEach((_,i)=>root.appendChild(navButton(i)))}
 const timeText=()=>String(Math.floor(remaining/3600)).padStart(2,'0')+':'+String(Math.floor(remaining%3600/60)).padStart(2,'0')+':'+String(remaining%60).padStart(2,'0');
-function draw(){if(finished)return;visited[current]=true;const q=questions[current];el('sectionName').textContent=q.section;el('questionTitle').textContent='Question No. '+(current+1);el('questionText').textContent=(q.comp?q.comp+'\\n\\n':'')+q.text;
+function draw(){if(finished)return;visited[current]=true;const q=questions[current];el('sectionName').textContent=q.section;el('questionTitle').textContent='Question No. '+(current+1);el('questionText').textContent=(q.comp?q.comp+'\\n\\n':'')+q.text;if(q.image){const img=document.createElement('img');img.src=q.image;img.alt='Question image';img.style.cssText='max-width:100%;height:auto;display:block';el('questionText').appendChild(img)};
 const choices=el('choices');choices.replaceChildren();q.options.forEach((option,i)=>{const label=document.createElement('label');label.className='choice';const input=document.createElement('input');input.type='radio';input.name='answer';input.checked=answers[current]===i;input.onchange=()=>{answers[current]=i;palette()};const span=document.createElement('span');span.textContent=option;label.append(input,span);if(q.images[i]){const img=document.createElement('img');img.src=q.images[i];img.alt='Option '+(i+1);label.appendChild(img)}choices.appendChild(label)});
 el('clock').textContent=timeText();el('previous').disabled=current===0;const counts={unvisited:0,notanswered:0,answered:0,review:0,reviewanswered:0};questions.forEach((_,i)=>counts[status(i)]++);el('counts').textContent='Answered: '+counts.answered+' · Not Answered: '+counts.notanswered+' · Review: '+(counts.review+counts.reviewanswered);palette()}
 function go(i){if(i<0||i>=questions.length)return;current=i;draw()}
