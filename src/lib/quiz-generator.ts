@@ -1,6 +1,7 @@
 import type { Question, QuizMetadata } from '@/components/QuizBuilder';
 
 export function generateHtmlQuiz(questions: Question[], metadata: QuizMetadata): string {
+  if (metadata.template === 'rrb-cbt') return generateRrbCbtTemplate(questions, metadata);
   if (metadata.template === 'modern') {
     return generateModernTemplate(questions, metadata);
   }
@@ -3072,4 +3073,93 @@ function generateModernTemplate(questions: Question[], metadata: QuizMetadata): 
     </script>
 </body>
 </html>`;
+}
+/** Independent RRB-style practice interface; no official insignia or affiliation. */
+function generateRrbCbtTemplate(questions: Question[], metadata: QuizMetadata): string {
+  const safe=(v:unknown)=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const ordered=metadata.shuffleQuestions?shuffleArray([...questions]):questions;
+  const payload=JSON.stringify(ordered.map(q=>({
+    id:q.id,section:q.section||'General',text:q.questionText,comp:q.compText||'',
+    options:q.options,images:q.optionImages||[],answer:q.correctOptionIndex,
+    positive:q.positiveMarks,negative:q.negativeMarks,explanation:q.explanation||''
+  }))).replace(/</g,'\\u003c');
+  const duration=Math.max(0,Number(metadata.timerDuration)||0)*60;
+  return \`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>\${safe(metadata.title)} — RRB-style Practice</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px Arial,Helvetica,sans-serif;color:#1c2535;background:#fff}
+button,select{font:inherit;cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid #2563eb;outline-offset:2px}
+header{background:#1a305b;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+header strong{font-size:17px}.subhead{background:#a9d5fb;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+#clock{font-weight:bold;background:#13294b;color:white;border-radius:3px;padding:4px 9px}
+#instructions{max-width:850px;margin:24px auto;padding:24px;border:1px solid #d7e0ed;line-height:1.7}
+#instructions h2{text-align:center}#instructions li{margin:8px 0}
+#exam{display:none}.layout{display:grid;grid-template-columns:minmax(0,1fr) 280px;min-height:calc(100dvh - 145px)}
+#main{min-width:0;display:flex;flex-direction:column}.numbers{background:#c8e1ff;padding:8px;display:flex;gap:5px;overflow:auto}
+.numbers button{min-width:36px;height:34px;border:1px solid #d6dce5;background:#fff;border-radius:2px}
+.numbers button.active{outline:2px solid #183f79}
+#questionArea{padding:16px;flex:1;overflow:auto}#questionTitle{border-bottom:1px solid #e1e6ef;padding-bottom:10px;font-weight:bold}
+#questionText{font-size:16px;line-height:1.65;margin:18px 0;white-space:pre-wrap}
+.choice{display:flex;align-items:flex-start;gap:12px;padding:12px 8px;cursor:pointer;border-bottom:1px solid #f0f3f7;overflow-wrap:anywhere}
+.choice input{margin-top:3px}.choice:has(input:checked){background:#e7f2ff}.choice img{max-width:95%;max-height:180px;display:block}
+aside{background:#eaf2fd;border-left:1px solid #b9c9de;padding:14px;overflow:auto}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}.legend div{display:flex;gap:7px;align-items:center;font-size:12px}
+.status{width:29px;height:29px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:bold;background:#cbd5e1;border-radius:3px;flex-shrink:0}
+.unvisited{background:#e2e8f0;color:#334155}.notanswered{background:#ed6b20}.answered{background:#3aa42e}.review{background:#7147a3;border-radius:50%}.reviewanswered{background:#7147a3;border-radius:50%;position:relative}.reviewanswered:after{content:'✓';position:absolute;right:-3px;bottom:-4px;background:#37a34a;border-radius:50%;font-size:9px;padding:2px}
+#palette{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}
+#palette button{border:0;height:36px}.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;padding:12px;border-top:1px solid #dce4f0;background:#f8fafc}
+button.action{padding:10px 13px;border:1px solid #cbd5e1;background:#fff;border-radius:3px}
+button.primary{background:#37a34a;color:#fff;border-color:#37a34a}button.submit{background:#5793d8;color:white;border-color:#5793d8}
+#result{display:none;max-width:900px;margin:25px auto;padding:24px}#reviewAnswers>div{padding:15px;border-bottom:1px solid #e2e8f0}
+@media(max-width:720px){.layout{display:block}aside{border-left:0;border-top:1px solid #b9c9de}#questionArea{min-height:40vh}header{padding:10px}.actions{position:sticky;bottom:0;z-index:2}#palette{grid-template-columns:repeat(8,minmax(0,1fr))}.legend{grid-template-columns:repeat(2,1fr)}}
+</style></head><body>
+<header><strong>\${safe(metadata.title)}</strong><span>ArcaneBook · RRB-style practice</span></header>
+<section id="instructions"><h2>Please read the instructions carefully</h2><h3>General Instructions</h3>
+<ol><li>Total duration: <b>\${safe(metadata.timerDuration)} minutes</b>.</li><li>Number of questions: <b>\${ordered.length}</b>.</li>
+<li>Each question has four options; select one answer.</li><li>Correct and incorrect answer marks follow the settings of each question.</li>
+<li>Use <b>Save & Next</b> to record your answer and proceed.</li><li>Use <b>Mark for Review & Next</b> to flag a question for later review.</li>
+<li>The question palette indicates Not Visited (grey), Not Answered (orange), Answered (green), Review (purple), and Answered & Review (purple with tick).</li>
+<li>The test submits automatically when the countdown reaches zero.</li></ol>
+<p>This is an independent practice interface inspired by CBT layouts. It is not an official Railway Recruitment Board examination website.</p>
+<label><input id="agree" type="checkbox"> I have read the instructions.</label>
+<p><button class="action primary" id="begin" disabled>I'm ready to begin</button></p></section>
+<section id="exam"><div class="subhead"><span>Question Paper · <span id="sectionName"></span></span><span>Time Left: <span id="clock"></span></span></div>
+<div class="layout"><div id="main"><nav class="numbers" id="topNumbers" aria-label="Question navigation"></nav>
+<div id="questionArea"><div id="questionTitle"></div><div id="questionText"></div><div id="choices"></div></div>
+<div class="actions"><button class="action" id="clear">Clear Response</button><button class="action" id="previous">Previous</button>
+<button class="action" id="mark">Mark for Review & Next</button><button class="action submit" id="submit">Submit</button>
+<button class="action primary" id="save">Save & Next</button></div></div>
+<aside><strong>Question Number Box</strong><div class="legend">
+<div><span class="status unvisited">1</span>Not Visited</div><div><span class="status notanswered">2</span>Not Answered</div>
+<div><span class="status answered">3</span>Answered</div><div><span class="status review">4</span>Review</div>
+<div><span class="status reviewanswered">5</span>Answered & Review</div></div>
+<div id="counts"></div><hr><nav id="palette" aria-label="Question palette"></nav></aside></div></section>
+<section id="result"><h2>Test Result</h2><div id="score"></div><h3>Question-wise review</h3><div id="reviewAnswers"></div></section>
+<script>
+const questions=\${payload};const duration=\${duration};
+const answers=Array(questions.length).fill(null),visited=Array(questions.length).fill(false),review=Array(questions.length).fill(false);
+let current=0,remaining=duration,finished=false,ticker=null;
+const el=id=>document.getElementById(id);
+const escapeHtml=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function status(i){if(review[i])return answers[i]===null?'review':'reviewanswered';if(answers[i]!==null)return 'answered';return visited[i]?'notanswered':'unvisited'}
+function navButton(i){const b=document.createElement('button');b.textContent=i+1;b.className='status '+status(i)+(i===current?' active':'');b.setAttribute('aria-label','Question '+(i+1));b.onclick=()=>go(i);return b}
+function palette(){for(const id of ['palette','topNumbers']){const root=el(id);root.replaceChildren();questions.forEach((_,i)=>root.appendChild(navButton(i)))}
+const timeText=()=>String(Math.floor(remaining/3600)).padStart(2,'0')+':'+String(Math.floor(remaining%3600/60)).padStart(2,'0')+':'+String(remaining%60).padStart(2,'0');
+function draw(){if(finished)return;visited[current]=true;const q=questions[current];el('sectionName').textContent=q.section;el('questionTitle').textContent='Question No. '+(current+1);el('questionText').textContent=(q.comp?q.comp+'\\n\\n':'')+q.text;
+const choices=el('choices');choices.replaceChildren();q.options.forEach((option,i)=>{const label=document.createElement('label');label.className='choice';const input=document.createElement('input');input.type='radio';input.name='answer';input.checked=answers[current]===i;input.onchange=()=>{answers[current]=i;palette()};const span=document.createElement('span');span.textContent=option;label.append(input,span);if(q.images[i]){const img=document.createElement('img');img.src=q.images[i];img.alt='Option '+(i+1);label.appendChild(img)}choices.appendChild(label)});
+el('clock').textContent=timeText();el('previous').disabled=current===0;const counts={unvisited:0,notanswered:0,answered:0,review:0,reviewanswered:0};questions.forEach((_,i)=>counts[status(i)]++);el('counts').textContent='Answered: '+counts.answered+' · Not Answered: '+counts.notanswered+' · Review: '+(counts.review+counts.reviewanswered);palette()}
+function go(i){if(i<0||i>=questions.length)return;current=i;draw()}
+function finish(){if(finished)return;if(!confirm('Submit your test now?'))return;submitNow()}
+function submitNow(){if(finished)return;finished=true;clearInterval(ticker);el('exam').style.display='none';el('result').style.display='block';let score=0,correct=0,wrong=0,unanswered=0;
+questions.forEach((q,i)=>{if(answers[i]===null)unanswered++;else if(answers[i]===q.answer){correct++;score+=q.positive}else{wrong++;score-=q.negative}});
+el('score').textContent='Score: '+Number(score.toFixed(4))+' | Correct: '+correct+' | Wrong: '+wrong+' | Unanswered: '+unanswered;
+const root=el('reviewAnswers');questions.forEach((q,i)=>{const div=document.createElement('div');const h=document.createElement('strong');h.textContent='Q'+(i+1)+'. '+q.text;const p=document.createElement('p');p.textContent='Your answer: '+(answers[i]===null?'Not answered':q.options[answers[i]])+' | Correct: '+q.options[q.answer];const ex=document.createElement('p');ex.textContent=q.explanation;div.append(h,p,ex);root.appendChild(div)});window.scrollTo(0,0)}
+el('agree').onchange=e=>el('begin').disabled=!e.target.checked;
+el('begin').onclick=()=>{el('instructions').style.display='none';el('exam').style.display='block';draw();ticker=setInterval(()=>{if(remaining>0)remaining--;el('clock').textContent=timeText();if(remaining<=0){clearInterval(ticker);submitNow()}},1000)};
+el('clear').onclick=()=>{answers[current]=null;draw()};
+el('previous').onclick=()=>go(current-1);
+el('save').onclick=()=>go(Math.min(current+1,questions.length-1));
+el('mark').onclick=()=>{review[current]=true;go(Math.min(current+1,questions.length-1))};
+el('submit').onclick=finish;
+</script></body></html>\`;
 }
