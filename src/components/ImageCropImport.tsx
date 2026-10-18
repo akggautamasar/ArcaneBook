@@ -55,62 +55,71 @@ export function ImageCropImport({onImport,positive,negative}:{onImport:(q:Questi
    setRect(null);draw(null);setMessage('Crop saved. Select another question or switch page.');
  };
 
- const detect=()=>{
+
+ const detect=async()=>{
   const b=base.current;if(!b)return;
-  setBusy(true);setMessage('Detecting question blocks from page layout…');
+  setBusy(true);setMessage('Reading question-number positions (images stay unchanged)…');
   try{
    const w=b.width,h=b.height;
-   const scan=document.createElement('canvas');const scale=Math.min(1,900/w);scan.width=Math.round(w*scale);scan.height=Math.round(h*scale);
-   const ctx=scan.getContext('2d',{willReadFrequently:true});if(!ctx)throw new Error('Canvas not supported');
+   // Detect the center divider independently of the title/header.
+   const scan=document.createElement('canvas');const ratio=Math.min(1,900/w);
+   scan.width=Math.round(w*ratio);scan.height=Math.round(h*ratio);
+   const ctx=scan.getContext('2d',{willReadFrequently:true});if(!ctx)throw new Error('Canvas unavailable');
    ctx.drawImage(b,0,0,scan.width,scan.height);
-   const data=ctx.getImageData(0,0,scan.width,scan.height).data;
-   const sw=scan.width,sh=scan.height;
-   const count=(x0:number,x1:number,y:number)=>{
-    let n=0;for(let x=x0;x<x1;x+=2){const p=(y*sw+x)*4;if(data[p]<165&&data[p+1]<165&&data[p+2]<165)n++}return n;
+   const pixels=ctx.getImageData(0,0,scan.width,scan.height).data;
+   const ink=(x:number,y:number)=>{const k=(y*scan.width+x)*4;return pixels[k]<145&&pixels[k+1]<145&&pixels[k+2]<145};
+   const columnInk=(x0:number,x1:number)=>{
+    let n=0;for(let y=Math.floor(scan.height*.20);y<scan.height*.88;y+=4)for(let x=x0;x<x1;x+=3)if(ink(x,y))n++;return n;
    };
-   // Ignore page headers/footers. Split into columns when the middle gutter is clear.
-   const gutterStart=Math.floor(sw*.47),gutterEnd=Math.floor(sw*.53);
-   let middleInk=0,sideInk=0;
-   for(let y=Math.floor(sh*.09);y<sh*.91;y+=3){
-    middleInk+=count(gutterStart,gutterEnd,y);
-    sideInk+=count(Math.floor(sw*.35),Math.floor(sw*.41),y)+count(Math.floor(sw*.59),Math.floor(sw*.65),y);
+   const sw=scan.width,mid=Math.floor(sw/2),strip=Math.max(4,Math.round(sw*.018));
+   const center=columnInk(mid-strip,mid+strip),left=columnInk(Math.floor(sw*.35),Math.floor(sw*.35)+strip*2);
+   const right=columnInk(Math.floor(sw*.63),Math.floor(sw*.63)+strip*2);
+   const twoColumns=center<Math.max(left,right)*.62;
+   const regions=twoColumns?[[.13,.505],[.51,.90]]:[[.11,.91]];
+   if(!(window as any).Tesseract){
+    await new Promise<void>((resolve,reject)=>{const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';script.onload=()=>resolve();script.onerror=()=>reject(new Error('Question locator could not load'));document.head.appendChild(script)});
    }
-   const twoColumns=middleInk<sideInk*.28;
-   const regions=twoColumns?[[Math.floor(sw*.035),Math.floor(sw*.49)],[Math.floor(sw*.51),Math.floor(sw*.965)]]:[[Math.floor(sw*.04),Math.floor(sw*.96)]];
+   const worker=await (window as any).Tesseract.createWorker('eng');
    const candidates:Rect[]=[];
-   for(const [x0,x1] of regions){
-    const active:boolean[]=[];
-    for(let y=0;y<sh;y++)active.push(count(x0,x1,y)>Math.max(3,(x1-x0)*.009));
-    const runs:{start:number;end:number}[]=[];
-    let begin=-1;
-    for(let y=0;y<=sh;y++){
-     if(y<sh&&active[y]){if(begin<0)begin=y}
-     else if(begin>=0){if(y-begin>=2)runs.push({start:begin,end:y});begin=-1}
+   try{
+    for(let col=0;col<regions.length;col++){
+     const [fractionStart,fractionEnd]=regions[col];
+     const x0=Math.floor(w*fractionStart),x1=Math.floor(w*fractionEnd);
+     const top=Math.floor(h*.095),bottom=Math.floor(h*.935);
+     const section=document.createElement('canvas');section.width=x1-x0;section.height=bottom-top;
+     const sectionCtx=section.getContext('2d');if(!sectionCtx)continue;
+     sectionCtx.drawImage(b,x0,top,section.width,section.height,0,0,section.width,section.height);
+     setMessage('Locating question numbers in column '+(col+1)+' of '+regions.length+'…');
+     const recognized=await worker.recognize(section);
+     const lines=(recognized.data.lines||[]) as {text:string;bbox:{x0:number;y0:number;x1:number;y1:number}}[];
+     const starts:number[]=[];
+     for(const line of lines){
+      const t=line.text.trim();
+      // Number must be at the left edge, followed by a period or closing bracket.
+      // This avoids mistaking option labels and numbers inside equations for questions.
+      if(line.bbox.x0>section.width*.15)continue;
+      const match=t.match(/^(?:Q(?:uestion)?\s*)?(\d{1,3}|[Il])\s*[.)]\s+\S/i);
+      if(match&&line.bbox.y0>section.height*.015){
+       const y=top+line.bbox.y0;
+       if(!starts.some(v=>Math.abs(v-y)<15))starts.push(y);
+      }
+     }
+     starts.sort((x,y)=>x-y);
+     if(starts.length<2){setMessage('Could not reliably locate multiple numbered questions in column '+(col+1)+'. No whole-page crop will be created.');continue;}
+     for(let i=0;i<starts.length;i++){
+      const y=Math.max(top,starts[i]-8);
+      const end=i+1<starts.length?Math.max(y+30,starts[i+1]-10):bottom;
+      if(end-y<24)continue;
+      candidates.push({x:x0,y,w:x1-x0,h:Math.min(bottom,end)-y});
+     }
     }
-    const filtered=runs.filter(r=>r.start>sh*.06&&r.end<sh*.96);
-    if(!filtered.length)continue;
-    // Large vertical whitespace is a candidate boundary between questions.
-    const gaps=filtered.slice(1).map((r,i)=>r.start-filtered[i].end).filter(v=>v>2).sort((a,b)=>a-b);
-    const median=gaps.length?gaps[Math.floor(gaps.length/2)]:7;
-    const threshold=Math.max(12,median*2.8);
-    let start=filtered[0].start,previous=filtered[0].end;
-    const emit=(end:number)=>{
-     if(end-start<25)return;
-     const top=Math.max(0,start-6),bottom=Math.min(sh,end+7);
-     candidates.push({x:x0/scale,y:top/scale,w:(x1-x0)/scale,h:(bottom-top)/scale});
-    };
-    for(const run of filtered.slice(1)){
-     if(run.start-previous>threshold){emit(previous);start=run.start}
-     previous=run.end;
-    }
-    emit(previous);
-   }
-   // If whitespace cannot separate blocks, provide whole-column crops for manual adjustment.
-   const output=candidates.length?candidates:regions.map(([x0,x1])=>({x:x0/scale,y:h*.07,w:(x1-x0)/scale,h:h*.87}));
-   const added=output.slice(0,45).map(rect=>({image:makeImage(b,rect),answer:null as number|null,page,rect}));
-   setCrops(prev=>[...prev,...added]);setMessage('Suggested '+added.length+' crops on page '+page+'. Review every crop; use Adjust crop to correct boundaries. These are layout-based suggestions, not verified questions.');
-  }catch(e){setMessage(e instanceof Error?e.message:'Automatic cropping failed');}
-  finally{setBusy(false);}
+   }finally{await worker.terminate()}
+   if(!candidates.length){setMessage('No reliable question boundaries detected. Try a clearer scan or draw a crop manually.');return;}
+   const added=candidates.slice(0,45).map(rect=>({image:makeImage(b,rect),answer:null as number|null,page,rect}));
+   setCrops(prev=>[...prev,...added]);
+   setMessage('Found '+added.length+' numbered question crops on page '+page+'. Review boundaries and adjust any mistakes before importing.');
+  }catch(e){setMessage(e instanceof Error?e.message:'Question detection failed. You can still crop manually.')}
+  finally{setBusy(false)}
  };
  const importCrops=()=>{
    const approved=crops.filter(c=>c.answer!==null);
@@ -122,8 +131,8 @@ export function ImageCropImport({onImport,positive,negative}:{onImport:(q:Questi
    onImport(questions);setMessage('Imported '+questions.length+' image-based questions. Unverified answers were excluded.');
  };
  return <section className="rounded-xl border p-4 space-y-3">
-   <h3 className="font-semibold">Image-based PDF import — no OCR required</h3>
-   <p className="text-sm text-muted-foreground">Upload a PDF and tap Auto-detect crops. Review the suggested question blocks; adjust inaccurate crops by dragging a replacement rectangle, then choose verified answers. Works with Hindi, maths and diagrams. Crops are stored in the generated test.</p>
+   <h3 className="font-semibold">Image-based PDF import — original images preserved</h3>
+   <p className="text-sm text-muted-foreground">Upload a PDF and tap Auto-detect crops. Review the suggested question blocks; adjust inaccurate crops by dragging a replacement rectangle, then choose verified answers. Question-number recognition helps locate boundaries; the original Hindi text, maths and diagrams remain images. Crops are stored in the generated test.</p>
    <input type="file" accept="application/pdf" aria-label="Choose PDF for image cropping" onChange={e=>{const f=e.target.files?.[0];if(f)void open(f)}}/>
    {doc&&<div className="flex flex-wrap items-center gap-2">
     <Button variant="outline" disabled={busy||page<=1} onClick={()=>void render(doc,page-1)}>Previous page</Button>
