@@ -22,6 +22,7 @@ export interface Question {
   options: string[];
   optionImages?: string[];
   questionImage?: string;
+  explanationImageUrl?: string;
   correctOptionIndex: number;
   explanation: string;
   section: string;
