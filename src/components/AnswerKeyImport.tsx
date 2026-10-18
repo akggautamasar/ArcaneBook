@@ -29,7 +29,7 @@ export function AnswerKeyImport({positive,negative,onImport}:{positive:number;ne
     const number=Number(a.text.match(/\\d+/)?.[0]||k+1);const special=text.some(i=>/full marks|discrepancy|bonus marks|all candidates/i.test(i.text));result.push({id:crypto.randomUUID(),page:p,number,section:currentSection,questionImage:crop(canvas,top,bottom,opts),answer:special?null:answer,confidence:special?'Special/bonus question — manual review':confidence,notes:'',included:!special&&answer!==null,special});
    }
   }
-  setRows(old=>[...old,...result]);setStatus('Found '+result.length+' question blocks. Confirm green ticks and crop boundaries before importing.');
+  setRows(old=>[...old,...result]);setStatus('Found '+result.length+' question blocks. Confirm green ticks and crop boundaries before importing.'+(result.length===0?' This PDF may have scanned or fragmented text; try Image-based PDF import for manual cropping.':''));
  }catch(e){setStatus(e instanceof Error?e.message:String(e))}finally{setBusy(false)}};
  const verified=rows.filter(r=>r.included&&r.answer!==null&&!r.special);
  const build=()=>verified.map(r=>({id:crypto.randomUUID(),questionText:'',questionImage:r.questionImage,options:['A','B','C','D'],correctOptionIndex:r.answer!,explanation:r.notes,section:r.section,positiveMarks:positive,negativeMarks:negative,compText:''} as Question));
