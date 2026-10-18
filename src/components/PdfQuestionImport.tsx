@@ -98,22 +98,28 @@ function extract(text: string, positive: number, negative: number): Draft[] {
   const normalize=(value:string)=>value.replace(/[०-९]/g,ch=>String('०१२३४५६७८९'.indexOf(ch)));
   const answerIndex=(value:string)=>'abcd'.indexOf(value.toLowerCase());
   const answerPattern=/^(?:ans(?:wer)?|correct\s*answer|उत्तर|सही\s*उत्तर)\s*[.:：\-]?\s*\(?([a-d])\)?(?=\s|[.):,;]|$)/i;
-  // Supports four options on one line as well as one option per line.
-  const optionPattern=/(^|\s)(?:\(([a-d])\)|([a-d])[.)])\s*/gi;
+  // OCR often reads (c) as (८), (©) or (0), and (b) as (७).
+  // Only interpret these lookalikes when they occur in an option-marker position.
+  const optionPattern=/(^|\s)(?:\(([a-dA-D८७©0])\)|([a-dA-D])[.)]|([८७©])\))\s*/g;
+  const optionIndex=(marker:string)=>{
+    if(marker==='८'||marker==='©'||marker==='0')return 2;
+    if(marker==='७')return 1;
+    return answerIndex(marker);
+  };
   const addOptions=(line:string)=>{
     if(!current)return false;
     const markers=[...line.matchAll(optionPattern)];
     if(!markers.length)return false;
-    // Avoid treating incidental text inside questions as an option list.
+    // Do not treat mathematical expressions or incidental "(a)" as options.
     if(markers[0].index!==0 && current.question.options.length===0 && markers.length<2)return false;
     let accepted=false;
     for(let i=0;i<markers.length;i++){
-      const marker=markers[i],idx=answerIndex(marker[2]||marker[3]);
+      const marker=markers[i],idx=optionIndex(marker[2]||marker[3]||marker[4]);
       const value=line.slice((marker.index||0)+marker[0].length,i+1<markers.length?markers[i+1].index:undefined).trim();
-      if(idx===current.question.options.length && value){
+      if(idx===current.question.options.length&&value){
         current.question.options.push(value);accepted=true;
       }else if(idx>=0){
-        current.warning='Option order or OCR letters need manual review';
+        current.warning='Some option markers may have been misread by OCR. Review them.';
       }
     }
     return accepted;
@@ -137,9 +143,9 @@ function extract(text: string, positive: number, negative: number): Draft[] {
       if(rest)current.question.explanation+=rest+' ';
       continue;
     }
-    const question=line.match(/^(\d{1,3})\s*[.)]\s*(.+)$/);
+    const question=line.match(/^(\d{1,3}|[IⅠ])\s*[.)]\s*(.+)$/i);
     if(question){
-      current={number:Number(question[1]),set,source:original,answerFound:false,warning:'',question:{
+      current={number:/^[IⅠ]$/i.test(question[1])?1:Number(question[1]),set,source:original,answerFound:false,warning:'',question:{
         id:crypto.randomUUID(),questionText:question[2],options:[],correctOptionIndex:0,explanation:'',
         section:set,positiveMarks:positive,negativeMarks:negative,compText:''
       }};
