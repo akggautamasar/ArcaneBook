@@ -85,6 +85,10 @@ export function ImageCropImport({onImport,positive,negative}:{onImport:(q:Questi
      sectionCtx.drawImage(b,x0,top,section.width,section.height,0,0,section.width,section.height);
      setMessage('Locating question numbers in column '+(col+1)+' of '+regions.length+'…');
      const recognized=await worker.recognize(section);
+     const gutter=document.createElement('canvas');gutter.width=gutterWidth;gutter.height=section.height;
+     gutter.getContext('2d')?.drawImage(section,0,0,gutterWidth,section.height,0,0,gutterWidth,section.height);
+     const gutterResult=await worker.recognize(gutter);
+     const numberLines=(gutterResult.data.lines||[]) as {text:string;bbox:{x0:number;y0:number;x1:number;y1:number}}[];
      const lines=(recognized.data.lines||[]) as {text:string;bbox:{x0:number;y0:number;x1:number;y1:number}}[];
      const starts:{y:number;number:number}[]=[];
      const answerLines:{y:number}[]=[];
@@ -93,6 +97,9 @@ export function ImageCropImport({onImport,positive,negative}:{onImport:(q:Questi
       const t=line.text.trim();
       if(/\bAns\s*[.:(]/i.test(t))answerLines.push({y:top+line.bbox.y0});
       if(/SOLUTION\s*[:\-]|ANSWER\s+KEY|PRACTICE\s+SET|^Type\s*[-:]/i.test(t))solutionHeaders.push(top+line.bbox.y0);
+     }
+     for(const line of numberLines){
+      const t=line.text.trim();
       const match=t.match(/^(\d{1,3}|[Il])\s*[.)]/);
       if(!match)continue;
       const number=/^[Il]$/.test(match[1])?1:Number(match[1]);
@@ -101,7 +108,9 @@ export function ImageCropImport({onImport,positive,negative}:{onImport:(q:Questi
       if(!starts.some(v=>Math.abs(v.y-y)<18))starts.push({y,number});
      }
      starts.sort((x,y)=>x.y-y.y);
-     if(starts.length<1){setMessage('Could not reliably locate multiple numbered questions in column '+(col+1)+'. No whole-page crop will be created.');continue;}
+     const solutionPage=solutionHeaders.some(h=>h<top+(bottom-top)*.28&&lines.some(l=>/SOLUTION\s*[:\-]|ANSWER\s+KEY/i.test(l.text)&&Math.abs(top+l.bbox.y0-h)<8));
+     if(solutionPage){setMessage('Solution/answer-key section detected; no question crops will be created for that column.');continue;}
+     if(starts.length<1){setMessage('Could not reliably locate numbered questions in column '+(col+1)+'. No whole-page crop will be created.');continue;}
      for(let i=0;i<starts.length;i++){
       const y=Math.max(top,starts[i].y-8);
       let end=i+1<starts.length?Math.max(y+30,starts[i+1].y-10):bottom;
