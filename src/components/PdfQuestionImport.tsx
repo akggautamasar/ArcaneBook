@@ -61,14 +61,14 @@ async function recognizeImages(files: File[], onProgress:(message:string)=>void)
           const half=Math.floor(canvas.width/2);
           const left=await worker.recognize(renderCrop(canvas,0,half));
           const right=await worker.recognize(renderCrop(canvas,half,canvas.width-half));
-          results.push(left.data.text+'\\n'+right.data.text);
+          results.push(left.data.text+'\n'+right.data.text);
         }else{
           const result=await worker.recognize(canvas);
           results.push(result.data.text);
         }
       }finally{bitmap.close();}
     }
-    return results.join('\\n');
+    return results.join('\n');
   }finally{await worker.terminate();}
 }
 const OCR_SERVICE = 'https://arcanebook-ocr.onrender.com';
@@ -186,102 +186,103 @@ export function PdfQuestionImport({ onImport, positive, negative }: { onImport:(
   const [message,setMessage]=useState('');
   const [selected,setSelected]=useState<Record<number,boolean>>({});
   const parse=()=>{const found=extract(raw,positive,negative);setDrafts(found);setSelected({});setMessage(found.length?`Found ${found.length} possible questions. Review before importing.`:'No questions recognized. Try text with numbered questions and (a)-(d) options.');};
+  const appendResult=(text:string)=>setRaw(previous=>appendText&&previous.trim()?previous+'\n'+text:text);
   const readImages=async()=>{
-    if(!images.length)return;
+    if(!images.length){setMessage('Choose at least one image first.');return;}
     setLoading(true);setDrafts([]);
     try{
       let text='';
       if(processingMode==='server'){
-        const chunks:string[]=[];
-        for(const [index,file] of images.entries()){
-          setMessage(`Server OCR: screenshot ${index+1} of ${images.length}…`);
-          chunks.push(await serverExtract(file,'1',columns));
+        try{
+          const chunks:string[]=[];
+          for(const [index,file] of images.entries()){
+            setMessage('Server OCR: image '+(index+1)+' of '+images.length+'…');
+            chunks.push(await serverExtract(file,'1',columns));
+          }
+          text=chunks.join('\n');
+          if(!text.trim())throw new Error('OCR returned no text');
+        }catch(error){
+          setMessage('Server unavailable; retrying images with on-device OCR…');
+          text=await recognizeImages(images,setMessage);
         }
-        text=chunks.join('\\n');
-      }else{
-        text=await recognizeImages(images,setMessage);
-      }
-      setRaw(previous=>appendText&&previous.trim()?previous+'\\n'+text:text);
-      setMessage(`Processed ${images.length} screenshot(s). Review the OCR text, then detect questions and answers. Missing figures require manual handling.`);
-    }catch(error){setMessage(error instanceof Error?error.message:'Unable to process screenshots');}
+      }else text=await recognizeImages(images,setMessage);
+      if(!text.trim())throw new Error('No readable text detected. Try a clearer image.');
+      appendResult(text);
+      setMessage('Text extracted from '+images.length+' image(s). Review it and select Detect questions and answers.');
+    }catch(error){setMessage(error instanceof Error?error.message:'Unable to process images');}
     finally{setLoading(false);}
   };
   const readPdf=async(file:File)=>{
-    setLoading(true);setMessage('Reading PDF text...');
+    setLoading(true);setMessage('Preparing selected PDF pages…');setDrafts([]);
     try{
-      if(processingMode==='server'){
-        let pages='1-10';
-        if(pageMode==='range')pages=`${startPage}-${startPage+pageCount-1}`;
-        if(pageMode==='list')pages=pageList;
-        setMessage('Sending selected pages to OCR server. First request may take longer while free service starts…');
-        const text=await serverExtract(file,pages,columns);
-        setRaw(previous=>appendText&&previous.trim()?previous+'\\n'+text:text);
-        setMessage('Server extraction complete. Review the text and detect questions.');
-        return;
-      }
       const pdfjs=await loadPdfJs();
       const pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),disableWorker:true}).promise;
       setTotalPages(pdf.numPages);
-      const selectedSpec=pageMode==='all'?'1-'+Math.min(10,pdf.numPages):pageMode==='range'?startPage+'-'+Math.min(pdf.numPages,startPage+Math.min(10,pageCount)-1):pageList;
-      try{
-        setMessage('Using OCR server; free hosting may take time to wake up…');
-        const serverText=await serverExtract(file,selectedSpec,'auto');
-        if(!serverText.trim())throw new Error('Empty server OCR result');
-        setRaw(previous=>appendText&&previous.trim()?previous+'\n'+serverText:serverText);
-        setMessage('Server extraction complete. Review text and detect questions.');
-        return;
-      }catch(error){
-        setMessage('Server unavailable; using device OCR instead…');
-      }
-      const pages:string[]=[];
       let selectedPages:number[]=[];
       if(pageMode==='range'){
-        const begin=Math.min(Math.max(1,startPage),pdf.numPages);
-        const end=Math.min(pdf.numPages,begin+Math.min(10,Math.max(1,pageCount))-1);
-        selectedPages=Array.from({length:end-begin+1},(_,i)=>begin+i);
+        if(startPage>pdf.numPages)throw new Error('Start page exceeds PDF length ('+pdf.numPages+').');
+        selectedPages=Array.from({length:Math.min(10,pageCount,pdf.numPages-startPage+1)},(_,i)=>startPage+i);
       }else if(pageMode==='all'){
-        selectedPages=Array.from({length:Math.min(pdf.numPages,10)},(_,i)=>i+1);
+        selectedPages=Array.from({length:Math.min(10,pdf.numPages)},(_,i)=>i+1);
       }else{
         const chosen=new Set<number>();
         for(const token of pageList.split(',')){
-          const trimmed=token.trim();
-          if(!trimmed)continue;
-          const match=trimmed.match(/^(\\d+)(?:\\s*-\\s*(\\d+))?$/);
+          const match=token.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
           if(!match)throw new Error('Invalid page list. Use 2,4,7-9.');
           const first=Number(match[1]),last=match[2]?Number(match[2]):first;
-          if(first<1||last<first||last>pdf.numPages)throw new Error(`Pages must be between 1 and ${pdf.numPages}.`);
-          if(last-first>100)throw new Error('Choose a smaller page range.');
-          for(let n=first;n<=last;n++)chosen.add(n);
+          if(first<1||last<first||last>pdf.numPages)throw new Error('Pages must be between 1 and '+pdf.numPages);
+          for(let i=first;i<=last;i++)chosen.add(i);
+          if(chosen.size>10)throw new Error('Choose up to 10 pages per batch.');
         }
-        selectedPages=Array.from(chosen).sort((a,b)=>a-b);
-        if(!selectedPages.length||selectedPages.length>10)throw new Error('Select between 1 and 10 pages per batch.');
+        selectedPages=[...chosen].sort((a,b)=>a-b);
       }
-      let worker:OcrWorker|undefined;
-      try{
-        for(const [index,i] of selectedPages.entries()){
-          setMessage(`Processing selected page ${index+1} of ${selectedPages.length} (PDF page ${i})…`);
-          const page=await pdf.getPage(i), items=(await page.getTextContent()).items;
-          let previousY=Infinity, out='';
-          for(const item of items){const y=item.transform?.[5]??0;if(previousY!==Infinity&&Math.abs(y-previousY)>3)out+='\\n';out+=(item.str||'')+' ';previousY=y;}
-          if(out.replace(/\\s/g,'').length<80&&ocrEnabled){
-            if(!worker){const tesseract=await loadOcr();setMessage('Downloading Hindi + English OCR language data (first run may take time)…');worker=await tesseract.createWorker('hin+eng');}
-            const viewport=page.getViewport({scale:2.5});
-            const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
-            const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas rendering unsupported');
-            await page.render({canvasContext:ctx,viewport}).promise;
-            // Two-column books must be read left-to-right by column, not across both columns.
-            const half=Math.floor(canvas.width/2);
-            const left=await worker.recognize(renderCrop(canvas,0,half));
-            const right=await worker.recognize(renderCrop(canvas,half,canvas.width-half));
-            out=left.data.text+'\\n'+right.data.text;
-          }
-          pages.push('\\n'+out);
+      if(!selectedPages.length)throw new Error('Select at least one PDF page.');
+      let text='';
+      if(processingMode==='server'){
+        try{
+          setMessage('Sending '+selectedPages.length+' selected pages to server OCR…');
+          text=await serverExtract(file,selectedPages.join(','),columns);
+          if(!text.trim())throw new Error('OCR server returned empty text');
+        }catch(error){
+          setMessage('Server OCR unavailable; retrying selected pages on your device…');
         }
-      }finally{if(worker)await worker.terminate();}
-      const text=pages.join('\\n');
-      setRaw(previous=>appendText&&previous.trim()?previous+'\\n'+text:text);
-      setMessage(text.trim().length<100?'No usable text detected. Try OCR and choose question pages rather than cover pages.':'Text ready. Inspect OCR accuracy and reading order, then select Detect Questions. Diagrams still require manual verification.');
-    }catch(err){setMessage(err instanceof Error?err.message:'Unable to read PDF');}
+      }
+      if(!text.trim()){
+        const pages:string[]=[];
+        let worker:OcrWorker|undefined;
+        try{
+          for(const [index,i] of selectedPages.entries()){
+            setMessage('Reading page '+(index+1)+' of '+selectedPages.length+' (PDF page '+i+')…');
+            const page=await pdf.getPage(i),items=(await page.getTextContent()).items;
+            let previousY=Infinity,out='';
+            for(const item of items){
+              const y=item.transform?.[5]??0;
+              if(previousY!==Infinity&&Math.abs(y-previousY)>3)out+='\n';
+              out+=(item.str||'')+' ';previousY=y;
+            }
+            if(out.replace(/\s/g,'').length<80&&ocrEnabled){
+              if(!worker){const tesseract=await loadOcr();worker=await tesseract.createWorker('hin+eng');}
+              const viewport=page.getViewport({scale:2.0});
+              const canvas=document.createElement('canvas');
+              canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+              const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas unavailable');
+              await page.render({canvasContext:ctx,viewport}).promise;
+              if(columns==='two'||(columns==='auto'&&canvas.width/canvas.height>0.72)){
+                const half=Math.floor(canvas.width/2);
+                const left=await worker.recognize(renderCrop(canvas,0,half));
+                const right=await worker.recognize(renderCrop(canvas,half,canvas.width-half));
+                out=left.data.text+'\n'+right.data.text;
+              }else out=(await worker.recognize(canvas)).data.text;
+            }
+            pages.push(out);
+          }
+        }finally{if(worker)await worker.terminate();}
+        text=pages.join('\n');
+      }
+      if(!text.trim())throw new Error('No text detected on these pages. Select pages containing questions.');
+      appendResult(text);
+      setMessage('Extracted '+selectedPages.length+' PDF page(s). Review the text, then press Detect questions and answers.');
+    }catch(error){setMessage(error instanceof Error?error.message:'Unable to process PDF');}
     finally{setLoading(false);}
   };
   const update=(index:number, patch:Partial<Question>, answerFound?:boolean)=>{
