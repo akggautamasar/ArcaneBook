@@ -9,6 +9,7 @@ import { QuestionList } from './QuestionList';
 import { BulkImport } from './BulkImport';
 import { PdfQuestionImport } from './PdfQuestionImport';
 import { ImageCropImport } from './ImageCropImport';
+import { AnswerKeyImport } from './AnswerKeyImport';
 import { QuizSettings } from './QuizSettings';
 import { QuizPreview } from './QuizPreview';
 import { MyTests } from './MyTests';
@@ -231,6 +232,7 @@ export const QuizBuilder: React.FC = () => {
           </TabsContent>
 
           <TabsContent value="pdf-import">
+            <AnswerKeyImport positive={quizMetadata.defaultPositiveMarks} negative={quizMetadata.defaultNegativeMarks} onImport={imported=>{setQuestions(prev=>[...prev,...imported]);toast({title:"Answer-key questions imported",description:imported.length+" questions added"});setActiveTab("questions")}} />
             <ImageCropImport positive={quizMetadata.defaultPositiveMarks} negative={quizMetadata.defaultNegativeMarks} onImport={imported=>{setQuestions(prev=>[...prev,...imported]);toast({title:'Image questions imported',description:imported.length+' questions added'});setActiveTab('questions')}} />
             <PdfQuestionImport positive={quizMetadata.defaultPositiveMarks} negative={quizMetadata.defaultNegativeMarks} onImport={imported => {
               setQuestions(prev => [...prev, ...imported]);
