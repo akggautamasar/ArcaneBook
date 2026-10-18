@@ -173,6 +173,7 @@ export const QuizSettings: React.FC<QuizSettingsProps> = ({ metadata, onUpdate }
                   {value:'exam-blue',label:'Exam Blue',description:'Blue government CBT-inspired screen',accent:'bg-blue-700'},
                   {value:'exam-green',label:'Exam Green',description:'Green recruitment CBT-inspired screen',accent:'bg-emerald-700'},
                   {value:'exam-minimal',label:'Exam Minimal',description:'Distraction-free examination screen',accent:'bg-slate-600'},
+                  {value:'rrb-cbt',label:'RRB CBT',description:'Railway exam-inspired instructions, blue navigation, question palette and review states',accent:'bg-blue-900'},
                 ] as const).map(t => (
                   <button key={t.value} type="button" role="radio" aria-checked={metadata.template === t.value}
                     onClick={() => handleChange('template', t.value)}
@@ -186,7 +187,7 @@ export const QuizSettings: React.FC<QuizSettingsProps> = ({ metadata, onUpdate }
                 ))}
               </div>
               <p className="text-sm text-muted-foreground">
-                Choose from five layouts. Exam-inspired layouts are independent recreations, not official exam portals.
+                Choose from six layouts. Exam-inspired layouts are independent recreations, not official exam portals.
               </p>
             </div>
           </div>
@@ -211,7 +212,7 @@ export const QuizSettings: React.FC<QuizSettingsProps> = ({ metadata, onUpdate }
                  </span>
                  <span className="flex items-center gap-1">
                    <Palette className="h-3 w-3" />
-                   {({classic:'Classic',modern:'Modern','exam-blue':'Exam Blue','exam-green':'Exam Green','exam-minimal':'Exam Minimal'} as const)[metadata.template]} template
+                   {({classic:'Classic',modern:'Modern','exam-blue':'Exam Blue','exam-green':'Exam Green','exam-minimal':'Exam Minimal','rrb-cbt':'RRB CBT'} as const)[metadata.template]} template
                  </span>
                  {metadata.shuffleQuestions && (
                    <span className="flex items-center gap-1">
