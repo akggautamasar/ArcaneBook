@@ -84,7 +84,7 @@ function generateClassicTemplate(questions: Question[], metadata: QuizMetadata):
             </div>
           `).join('')}
         </div>
-        ${q.explanation ? `
+        ${(q.explanation || q.explanationImageUrl) ? `
         <div class="solution" id="sol-${q.id}">
           <div class="solution-title"><i class="fas fa-lightbulb"></i> Solution</div>
           <div class="solution-content">${q.explanation}</div>
@@ -1473,7 +1473,7 @@ function generateModernTemplate(questions: Question[], metadata: QuizMetadata): 
     options: q.options,
     correctAnswer: q.correctOptionIndex,
     explanation: q.explanation || '',
-    explanationImageUrl: '',
+    explanationImageUrl: q.explanationImageUrl || '',
     compText: q.compText || '',
     optionImages: q.optionImages || [],
     positiveMarks: q.positiveMarks,
