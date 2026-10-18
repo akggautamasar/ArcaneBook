@@ -8,6 +8,7 @@ import { QuestionForm } from './QuestionForm';
 import { QuestionList } from './QuestionList';
 import { BulkImport } from './BulkImport';
 import { PdfQuestionImport } from './PdfQuestionImport';
+import { ImageCropImport } from './ImageCropImport';
 import { QuizSettings } from './QuizSettings';
 import { QuizPreview } from './QuizPreview';
 import { MyTests } from './MyTests';
@@ -20,6 +21,7 @@ export interface Question {
   questionText: string;
   options: string[];
   optionImages?: string[];
+  questionImage?: string;
   correctOptionIndex: number;
   explanation: string;
   section: string;
@@ -59,7 +61,7 @@ export const QuizBuilder: React.FC = () => {
   const { toast } = useToast();
 
   const addOrUpdateQuestion = () => {
-    if (!currentQuestion.questionText || currentQuestion.options.some(o => !o.trim())) {
+    if ((!currentQuestion.questionText && !currentQuestion.questionImage) || currentQuestion.options.some(o => !o.trim())) {
       toast({ title: 'Validation Error', description: 'Fill in all question text and options.', variant: 'destructive' });
       return;
     }
@@ -228,6 +230,7 @@ export const QuizBuilder: React.FC = () => {
           </TabsContent>
 
           <TabsContent value="pdf-import">
+            <ImageCropImport positive={quizMetadata.defaultPositiveMarks} negative={quizMetadata.defaultNegativeMarks} onImport={imported=>{setQuestions(prev=>[...prev,...imported]);toast({title:'Image questions imported',description:imported.length+' questions added'});setActiveTab('questions')}} />
             <PdfQuestionImport positive={quizMetadata.defaultPositiveMarks} negative={quizMetadata.defaultNegativeMarks} onImport={imported => {
               setQuestions(prev => [...prev, ...imported]);
               toast({ title: 'PDF questions imported', description: `${imported.length} questions added to your question bank.` });
