@@ -46,8 +46,8 @@ async function handler(req,res) {
     if(!sameOrigin(req)&&req.method==='POST')return reply(res,403,{error:'Invalid origin'});
     const create=req.method==='POST';
     if(create){
-      const max=20*1024*1024;
-      if(Number(req.headers['content-length']||0)>max)return reply(res,413,{error:'Maximum upload is 20 MB'});
+      const max=(admin?100:20)*1024*1024;
+      if(Number(req.headers['content-length']||0)>max)return reply(res,413,{error:'Maximum upload is '+(admin?100:20)+' MB'});
       if(!admin&&!limit(req))return reply(res,429,{error:'Public limit: 5 requests per hour'});
       if(activeJobs>=2)return reply(res,429,{error:'Converter is busy; retry shortly'});
       activeJobs++;
