@@ -4,7 +4,7 @@ import { ArrowLeft, FileUp, Loader2, Download, Play, AlertTriangle } from "lucid
 
 const API = (import.meta.env.VITE_PDF2MOCK_API_URL || "").replace(/\/$/, "");
 type Job = { id?: string; job_id?: string; status?: string; error?: string; message?: string };
-export default function PdfToMockTest() {
+export default function PdfToMockTest({ embedded = false }: { embedded?: boolean }) {
   const [pdf, setPdf] = useState<File | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [config, setConfig] = useState('{"title":"My Mock Test","mode":"papers","papers":[{"name":"Paper 1","pages":[1,10]}]}');
@@ -63,11 +63,11 @@ export default function PdfToMockTest() {
     } catch(e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
-  return <main className="min-h-screen bg-slate-50 text-slate-900">
-    <header className="bg-gradient-to-r from-slate-950 to-indigo-900 text-white p-6">
+  return <main className={embedded ? "rounded-xl bg-slate-50 text-slate-900" : "min-h-screen bg-slate-50 text-slate-900"}>
+    {!embedded && <header className="bg-gradient-to-r from-slate-950 to-indigo-900 text-white p-6">
       <div className="max-w-4xl mx-auto"><Link to="/mock-tests" className="inline-flex items-center gap-2 text-indigo-200"><ArrowLeft size={18}/> Mock Test Library</Link>
       <h1 className="text-3xl font-bold mt-5">PDF to Mock Test</h1><p className="text-indigo-100 mt-2">Convert solved papers and chapterwise PYQs into interactive timed tests.</p></div>
-    </header>
+    </header>}
     <section className="max-w-4xl mx-auto p-5 space-y-5">
       {!API && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex gap-2"><AlertTriangle/> Conversion backend not configured. Set VITE_PDF2MOCK_API_URL in Vercel and deploy the supplied Python service separately.</div>}
       <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-4">
@@ -81,7 +81,7 @@ export default function PdfToMockTest() {
         <label htmlFor="pdf-config" className="font-semibold block">2. Configure paper or chapter ranges</label>
         <textarea id="pdf-config" value={config} onChange={e=>setConfig(e.target.value)} spellCheck={false} rows={9} className="w-full rounded-lg border p-3 font-mono text-sm" />
         <p className="text-sm text-slate-500">Page numbers and PDF geometry depend on your book. Use Inspect PDF first and adjust the configuration before conversion.</p>
-        <button onClick={upload} disabled={!pdf || busy || !API} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 font-semibold text-white disabled:opacity-50">{busy ? <Loader2 className="animate-spin" size={18}/> : <FileUp size={18}/>} {busy ? "Processing…" : "Generate mock test"}</button>
+        <button onClick={upload} disabled={!pdf || busy || !API || !apiKey} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 font-semibold text-white disabled:opacity-50">{busy ? <Loader2 className="animate-spin" size={18}/> : <FileUp size={18}/>} {busy ? "Processing…" : "Generate mock test"}</button>
       </div>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-4 text-red-800">{error}</p>}
       {job && <p role="status" className="rounded-lg bg-indigo-50 p-4">Job status: {job.status || "queued"}</p>}
