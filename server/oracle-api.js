@@ -58,14 +58,14 @@ async function handler(req,res) {
       activeJobs++;
     }
     let tempDirectory;
+    let receivedBytes=0;
     try {
       const uploadLimit=(admin?500:20)*1024*1024;
       let uploadStream;
       let uploadSize=0;
-      let receivedBytes=0;
       if(create){
         console.info('[upload:start]',path,'declared='+String(req.headers['content-length']||'unknown'),'remote='+String(req.socket.remoteAddress||''));
-        req.on('aborted',()=>console.warn('[upload:aborted]',path,'received='+String(receivedBytes)));
+        req.on('aborted',()=>console.warn('[upload:aborted]',path,'received='+String(receivedBytes),'expected='+String(req.headers['content-length']||'unknown')));
         tempDirectory=await mkdtemp(join(tmpdir(),'arcane-upload-'));
         const uploadPath=join(tempDirectory,'multipart.bin');
         let received=0;
@@ -109,7 +109,7 @@ async function handler(req,res) {
           uploadStream.pipe(upstreamReq);
         }else upstreamReq.end();
       });
-    }catch(e){console.error('[upload:error]',path,'received='+String(receivedBytes),e?.code||'',e?.message||e);if(!res.headersSent)reply(res,String(e?.message||'').includes('Upload exceeds')?413:502,{error:String(e?.message||'').includes('Upload exceeds')?'Upload exceeds allowed size':'Converter unavailable or timed out'});else res.destroy();}
+    }catch(e){console.error('[upload:error]',path,'received='+String(receivedBytes),e?.code||'',e?.message||e);if(!res.destroyed&&!res.headersSent)reply(res,String(e?.message||'').includes('Upload exceeds')?413:502,{error:String(e?.message||'').includes('Upload exceeds')?'Upload exceeds allowed size':'Converter unavailable or timed out'});else res.destroy();}
     finally{if(tempDirectory)await rm(tempDirectory,{recursive:true,force:true}).catch(e=>console.error('Temporary upload cleanup failed:',e));if(create)activeJobs--;}
     return;
   }
