@@ -127,8 +127,8 @@ async function handler(req,res) {
       if(!['probe','jobs'].includes(data.action))return reply(res,400,{error:'Invalid action'});
       const boundary='----arcane-'+randomUUID().replaceAll('-','');
       const pdfName='upload.pdf';
-      const prefix=Buffer.from('--'+boundary+'\\r\\nContent-Disposition: form-data; name="file"; filename="'+pdfName+'"\\r\\nContent-Type: application/pdf\\r\\n\\r\\n');
-      const suffix=Buffer.from(data.action==='jobs'?'\\r\\n--'+boundary+'\\r\\nContent-Disposition: form-data; name="config"\\r\\n\\r\\n'+JSON.stringify(data.config||{})+'\\r\\n--'+boundary+'--\\r\\n':'\\r\\n--'+boundary+'--\\r\\n');
+      const prefix=Buffer.from('--'+boundary+'\r\nContent-Disposition: form-data; name="file"; filename="'+pdfName+'"\r\nContent-Type: application/pdf\r\n\r\n');
+      const suffix=Buffer.from(data.action==='jobs'?'\r\n--'+boundary+'\r\nContent-Disposition: form-data; name="config"\r\n\r\n'+JSON.stringify(data.config||{})+'\r\n--'+boundary+'--\r\n':'\r\n--'+boundary+'--\r\n');
       const multipart=join(u.dir,'multipart.bin');
       u.busy=true;
       try{
