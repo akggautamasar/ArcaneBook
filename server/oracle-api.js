@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { auth, default as apiHandler } from '../api/index.js';
 
@@ -53,19 +53,22 @@ async function handler(req,res) {
       activeJobs++;
     }
     try {
+      const uploadLimit=(admin?500:20)*1024*1024;
+      let received=0;
+      const boundedUpload=create?req.pipe(new Transform({transform(chunk,encoding,callback){received+=chunk.length;if(received>uploadLimit){callback(new Error('Upload exceeds allowed size'));return;}callback(null,chunk);}})):undefined;
       const headers=new Headers();
       for(const [k,v] of Object.entries(req.headers)){
-        if(['host','cookie','x-api-key','connection','content-length','transfer-encoding'].includes(k))continue;
+        if(['host','cookie','x-api-key','connection','transfer-encoding'].includes(k))continue;
         if(typeof v==='string')headers.set(k,v);
       }
       headers.set('x-api-key',process.env.PDF2MOCK_API_KEY||'');
-      const upstream=await fetch(converter+path+url.search,{method:req.method,headers,body:create?req:undefined,duplex:create?'half':undefined,signal:AbortSignal.timeout(120000)});
+      const upstream=await fetch(converter+path+url.search,{method:req.method,headers,body:boundedUpload,duplex:create?'half':undefined,signal:AbortSignal.timeout(600000)});
       const responseHeaders={};
       for(const [k,v] of upstream.headers)if(!['transfer-encoding','connection','set-cookie','access-control-allow-origin'].includes(k))responseHeaders[k]=v;
       responseHeaders['cache-control']='no-store';
       res.writeHead(upstream.status,responseHeaders);
       if(upstream.body)await new Promise((resolve,reject)=>{const s=Readable.fromWeb(upstream.body);s.on('error',reject);res.on('close',resolve);s.on('end',resolve);s.pipe(res);});else res.end();
-    }catch(e){if(!res.headersSent)reply(res,502,{error:'Converter unavailable'});else res.destroy();}
+    }catch(e){if(!res.headersSent)reply(res,String(e?.message||'').includes('Upload exceeds')?413:502,{error:String(e?.message||'').includes('Upload exceeds')?'Upload exceeds allowed size':'Converter unavailable or timed out'});else res.destroy();}
     finally{if(create)activeJobs--;}
     return;
   }
