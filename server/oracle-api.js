@@ -1,5 +1,10 @@
 import http from 'node:http';
 import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { auth, default as apiHandler } from '../api/index.js';
 
@@ -52,24 +57,35 @@ async function handler(req,res) {
       if(activeJobs>=2)return reply(res,429,{error:'Converter is busy; retry shortly'});
       activeJobs++;
     }
+    let tempDirectory;
     try {
       const uploadLimit=(admin?500:20)*1024*1024;
-      let received=0;
-      const boundedUpload=create?req.pipe(new Transform({transform(chunk,encoding,callback){received+=chunk.length;if(received>uploadLimit){callback(new Error('Upload exceeds allowed size'));return;}callback(null,chunk);}})):undefined;
+      let uploadStream;
+      let uploadSize=0;
+      if(create){
+        tempDirectory=await mkdtemp(join(tmpdir(),'arcane-upload-'));
+        const uploadPath=join(tempDirectory,'multipart.bin');
+        let received=0;
+        const bounded=new Transform({transform(chunk,encoding,callback){received+=chunk.length;if(received>uploadLimit){callback(new Error('Upload exceeds allowed size'));return;}callback(null,chunk);}});
+        await pipeline(req,bounded,createWriteStream(uploadPath,{mode:0o600}));
+        uploadSize=(await stat(uploadPath)).size;
+        uploadStream=createReadStream(uploadPath);
+      }
       const headers=new Headers();
       for(const [k,v] of Object.entries(req.headers)){
         if(['host','cookie','x-api-key','connection','transfer-encoding'].includes(k))continue;
         if(typeof v==='string')headers.set(k,v);
       }
       headers.set('x-api-key',process.env.PDF2MOCK_API_KEY||'');
-      const upstream=await fetch(converter+path+url.search,{method:req.method,headers,body:boundedUpload,duplex:create?'half':undefined,signal:AbortSignal.timeout(600000)});
+      if(create)headers.set('content-length',String(uploadSize));
+      const upstream=await fetch(converter+path+url.search,{method:req.method,headers,body:uploadStream,duplex:create?'half':undefined,signal:AbortSignal.timeout(600000)});
       const responseHeaders={};
       for(const [k,v] of upstream.headers)if(!['transfer-encoding','connection','set-cookie','access-control-allow-origin'].includes(k))responseHeaders[k]=v;
       responseHeaders['cache-control']='no-store';
       res.writeHead(upstream.status,responseHeaders);
       if(upstream.body)await new Promise((resolve,reject)=>{const s=Readable.fromWeb(upstream.body);s.on('error',reject);res.on('close',resolve);s.on('end',resolve);s.pipe(res);});else res.end();
     }catch(e){if(!res.headersSent)reply(res,String(e?.message||'').includes('Upload exceeds')?413:502,{error:String(e?.message||'').includes('Upload exceeds')?'Upload exceeds allowed size':'Converter unavailable or timed out'});else res.destroy();}
-    finally{if(create)activeJobs--;}
+    finally{if(tempDirectory)await rm(tempDirectory,{recursive:true,force:true}).catch(e=>console.error('Temporary upload cleanup failed:',e));if(create)activeJobs--;}
     return;
   }
   if(path!=='/api')return reply(res,404,{error:'Not found'});
