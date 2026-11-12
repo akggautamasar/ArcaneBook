@@ -6,6 +6,7 @@ const API = (import.meta.env.VITE_PDF2MOCK_API_URL || "").replace(/\/$/, "");
 type Job = { id?: string; job_id?: string; status?: string; error?: string; message?: string };
 export default function PdfToMockTest() {
   const [pdf, setPdf] = useState<File | null>(null);
+  const [apiKey, setApiKey] = useState("");
   const [config, setConfig] = useState('{"title":"My Mock Test","mode":"papers","papers":[{"name":"Paper 1","pages":[1,10]}]}');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -13,13 +14,13 @@ export default function PdfToMockTest() {
   const [preview, setPreview] = useState("");
   const [htmlUrl, setHtmlUrl] = useState("");
   async function upload() {
-    if (!pdf || !API) return;
+    if (!pdf || !API || !apiKey) return;
     setBusy(true); setError(""); setJob(null); setHtmlUrl("");
     try {
       const parsed = JSON.parse(config);
       if (!Array.isArray(parsed.papers) && !Array.isArray(parsed.chapters)) throw new Error("Configure papers or chapters with page ranges.");
       const data = new FormData(); data.append("file", pdf); data.append("config", JSON.stringify(parsed));
-      const res = await fetch(API + "/api/jobs", { method:"POST", body:data });
+      const res = await fetch(API + "/api/jobs", { method:"POST", body:data, headers: {"X-API-Key": apiKey} });
       const result: Job = await res.json();
       if (!res.ok) throw new Error(result.error || result.message || "Upload failed");
       const id = result.id || result.job_id;
@@ -27,7 +28,7 @@ export default function PdfToMockTest() {
       setJob(result);
       for (let i=0;i<180;i++) {
         await new Promise(r=>setTimeout(r,2000));
-        const poll = await fetch(API + "/api/jobs/" + encodeURIComponent(id));
+        const poll = await fetch(API + "/api/jobs/" + encodeURIComponent(id), {headers: {"X-API-Key": apiKey}});
         if (!poll.ok) throw new Error("Unable to check conversion progress");
         const status: Job = await poll.json(); setJob(status);
         if (["done","completed","success"].includes(status.status || "")) {
@@ -43,7 +44,7 @@ export default function PdfToMockTest() {
     setBusy(true); setError("");
     try {
       const data = new FormData(); data.append("file",pdf);
-      const res = await fetch(API + "/api/probe", {method:"POST",body:data});
+      const res = await fetch(API + "/api/probe", {method:"POST",body:data, headers: {"X-API-Key": apiKey}});
       const result = await res.text();
       if (!res.ok) throw new Error(result);
       setPreview(result);
@@ -58,10 +59,10 @@ export default function PdfToMockTest() {
     <section className="max-w-4xl mx-auto p-5 space-y-5">
       {!API && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex gap-2"><AlertTriangle/> Conversion backend not configured. Set VITE_PDF2MOCK_API_URL in Vercel and deploy the supplied Python service separately.</div>}
       <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-4">
-        <label className="font-semibold block" htmlFor="pdf-upload">1. Upload a solved-paper PDF</label>
+        <label className="font-semibold block" htmlFor="api-key">Oracle converter API key</label><input id="api-key" type="password" autoComplete="off" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="Enter API key from Oracle installation" className="w-full rounded-lg border p-3"/><p className="text-xs text-slate-500">The key stays in this page state and is not saved to browser storage.</p><label className="font-semibold block" htmlFor="pdf-upload">1. Upload a solved-paper PDF</label>
         <input id="pdf-upload" type="file" accept=".pdf,application/pdf" className="block w-full" onChange={e=>setPdf(e.target.files?.[0] || null)}/>
         <p className="text-sm text-slate-500">Supported: selectable-text PDFs with four-option questions and Ans (a–d) answer keys. Scanned PDFs require OCR first.</p>
-        <button disabled={!pdf || busy || !API} onClick={probe} className="rounded-lg border px-4 py-2 disabled:opacity-50">Inspect PDF layout</button>
+        <button disabled={!pdf || busy || !API || !apiKey} onClick={probe} className="rounded-lg border px-4 py-2 disabled:opacity-50">Inspect PDF layout</button>
         {preview && <pre className="max-h-60 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-100 p-3 text-xs">{preview}</pre>}
       </div>
       <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-3">
