@@ -18,7 +18,7 @@ export default function PdfToMockTest() {
     try {
       const parsed = JSON.parse(config);
       if (!Array.isArray(parsed.papers) && !Array.isArray(parsed.chapters)) throw new Error("Configure papers or chapters with page ranges.");
-      const data = new FormData(); data.append("pdf", pdf); data.append("config", JSON.stringify(parsed));
+      const data = new FormData(); data.append("file", pdf); data.append("config", JSON.stringify(parsed));
       const res = await fetch(API + "/api/jobs", { method:"POST", body:data });
       const result: Job = await res.json();
       if (!res.ok) throw new Error(result.error || result.message || "Upload failed");
@@ -42,7 +42,7 @@ export default function PdfToMockTest() {
     if (!pdf || !API) return;
     setBusy(true); setError("");
     try {
-      const data = new FormData(); data.append("pdf",pdf);
+      const data = new FormData(); data.append("file",pdf);
       const res = await fetch(API + "/api/probe", {method:"POST",body:data});
       const result = await res.text();
       if (!res.ok) throw new Error(result);
