@@ -62,13 +62,17 @@ async function handler(req,res) {
       const uploadLimit=(admin?500:20)*1024*1024;
       let uploadStream;
       let uploadSize=0;
+      let receivedBytes=0;
       if(create){
+        console.info('[upload:start]',path,'declared='+String(req.headers['content-length']||'unknown'),'remote='+String(req.socket.remoteAddress||''));
+        req.on('aborted',()=>console.warn('[upload:aborted]',path,'received='+String(receivedBytes)));
         tempDirectory=await mkdtemp(join(tmpdir(),'arcane-upload-'));
         const uploadPath=join(tempDirectory,'multipart.bin');
         let received=0;
-        const bounded=new Transform({transform(chunk,encoding,callback){received+=chunk.length;if(received>uploadLimit){callback(new Error('Upload exceeds allowed size'));return;}callback(null,chunk);}});
+        const bounded=new Transform({transform(chunk,encoding,callback){received+=chunk.length;receivedBytes=received;if(received>uploadLimit){callback(new Error('Upload exceeds allowed size'));return;}callback(null,chunk);}});
         await pipeline(req,bounded,createWriteStream(uploadPath,{mode:0o600}));
         uploadSize=(await stat(uploadPath)).size;
+        console.info('[upload:complete]',path,'bytes='+uploadSize);
         uploadStream=createReadStream(uploadPath);
       }
       const headers={};
@@ -105,7 +109,7 @@ async function handler(req,res) {
           uploadStream.pipe(upstreamReq);
         }else upstreamReq.end();
       });
-    }catch(e){if(!res.headersSent)reply(res,String(e?.message||'').includes('Upload exceeds')?413:502,{error:String(e?.message||'').includes('Upload exceeds')?'Upload exceeds allowed size':'Converter unavailable or timed out'});else res.destroy();}
+    }catch(e){console.error('[upload:error]',path,'received='+String(receivedBytes),e?.code||'',e?.message||e);if(!res.headersSent)reply(res,String(e?.message||'').includes('Upload exceeds')?413:502,{error:String(e?.message||'').includes('Upload exceeds')?'Upload exceeds allowed size':'Converter unavailable or timed out'});else res.destroy();}
     finally{if(tempDirectory)await rm(tempDirectory,{recursive:true,force:true}).catch(e=>console.error('Temporary upload cleanup failed:',e));if(create)activeJobs--;}
     return;
   }
@@ -125,4 +129,8 @@ async function handler(req,res) {
   };
   await apiHandler(req,adapter);
 }
-http.createServer((req,res)=>{handler(req,res).catch(e=>{console.error(e);if(!res.headersSent)reply(res,500,{error:'Internal server error'});else res.destroy();});}).listen(port,host,()=>console.log('ArcaneBook API listening on '+host+':'+port));
+const server=http.createServer((req,res)=>{handler(req,res).catch(e=>{console.error('[handler:error]',req.url,e);if(!res.headersSent)reply(res,500,{error:'Internal server error'});else res.destroy();});});
+server.requestTimeout=15*60*1000;
+server.headersTimeout=60*1000;
+server.keepAliveTimeout=65*1000;
+server.listen(port,host,()=>console.log('ArcaneBook API listening on '+host+':'+port));
