@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { Readable, Transform } from 'node:stream';
+import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
@@ -71,19 +71,40 @@ async function handler(req,res) {
         uploadSize=(await stat(uploadPath)).size;
         uploadStream=createReadStream(uploadPath);
       }
-      const headers=new Headers();
+      const headers={};
       for(const [k,v] of Object.entries(req.headers)){
-        if(['host','cookie','x-api-key','connection','transfer-encoding'].includes(k))continue;
-        if(typeof v==='string')headers.set(k,v);
+        if(['host','cookie','x-api-key','connection','transfer-encoding','expect'].includes(k))continue;
+        if(typeof v==='string'||Array.isArray(v))headers[k]=v;
       }
-      headers.set('x-api-key',process.env.PDF2MOCK_API_KEY||'');
-      if(create)headers.set('content-length',String(uploadSize));
-      const upstream=await fetch(converter+path+url.search,{method:req.method,headers,body:uploadStream,duplex:create?'half':undefined,signal:AbortSignal.timeout(600000)});
-      const responseHeaders={};
-      for(const [k,v] of upstream.headers)if(!['transfer-encoding','connection','set-cookie','access-control-allow-origin'].includes(k))responseHeaders[k]=v;
-      responseHeaders['cache-control']='no-store';
-      res.writeHead(upstream.status,responseHeaders);
-      if(upstream.body)await new Promise((resolve,reject)=>{const s=Readable.fromWeb(upstream.body);s.on('error',reject);res.on('close',resolve);s.on('end',resolve);s.pipe(res);});else res.end();
+      headers['x-api-key']=process.env.PDF2MOCK_API_KEY||'';
+      if(create)headers['content-length']=String(uploadSize);
+      const start=Date.now();
+      await new Promise((resolve,reject)=>{
+        const upstreamReq=http.request({
+          hostname:'127.0.0.1',port:8765,
+          path:path+url.search,method:req.method,headers,
+          timeout:600000
+        },upstreamRes=>{
+          const responseHeaders={};
+          for(const [k,v] of Object.entries(upstreamRes.headers)){
+            if(['transfer-encoding','connection','set-cookie','access-control-allow-origin'].includes(k)||v===undefined)continue;
+            responseHeaders[k]=v;
+          }
+          responseHeaders['cache-control']='no-store';
+          console.info('[converter]',req.method,path,'bytes='+uploadSize,'status='+upstreamRes.statusCode,'ms='+(Date.now()-start));
+          res.writeHead(upstreamRes.statusCode||502,responseHeaders);
+          upstreamRes.on('error',reject);
+          res.on('close',()=>upstreamRes.destroy());
+          upstreamRes.pipe(res);
+          upstreamRes.on('end',resolve);
+        });
+        upstreamReq.on('timeout',()=>upstreamReq.destroy(new Error('Converter request timed out')));
+        upstreamReq.on('error',reject);
+        if(create){
+          uploadStream.on('error',e=>upstreamReq.destroy(e));
+          uploadStream.pipe(upstreamReq);
+        }else upstreamReq.end();
+      });
     }catch(e){if(!res.headersSent)reply(res,String(e?.message||'').includes('Upload exceeds')?413:502,{error:String(e?.message||'').includes('Upload exceeds')?'Upload exceeds allowed size':'Converter unavailable or timed out'});else res.destroy();}
     finally{if(tempDirectory)await rm(tempDirectory,{recursive:true,force:true}).catch(e=>console.error('Temporary upload cleanup failed:',e));if(create)activeJobs--;}
     return;
