@@ -9,6 +9,7 @@ import UserTypeSelection from "./pages/UserTypeSelection";
 import Index from "./pages/Index";
 import PasswordProtectedIndex from "./pages/PasswordProtectedIndex";
 import MockTests from "./pages/MockTests";
+import PdfToMockTest from "./pages/PdfToMockTest";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
             />
             <Route path="/password-protected" element={<PasswordProtectedIndex />} />
             <Route path="/mock-tests" element={<MockTests />} />
+            <Route path="/pdf-to-mock-test" element={<ProtectedRoute><PdfToMockTest /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
