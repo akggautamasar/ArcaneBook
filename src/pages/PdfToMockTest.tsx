@@ -39,6 +39,18 @@ export default function PdfToMockTest() {
     } catch(e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
+  async function openResult(download: boolean) {
+    if (!htmlUrl) return;
+    try {
+      const response = await fetch(htmlUrl, {headers: {"X-API-Key": apiKey}});
+      if (!response.ok) throw new Error("Unable to retrieve generated HTML");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      if (download) { const a = document.createElement("a"); a.href = url; a.download = "arcane-mock-test.html"; a.click(); }
+      else window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch(e) { setError(e instanceof Error ? e.message : String(e)); }
+  }
   async function probe() {
     if (!pdf || !API) return;
     setBusy(true); setError("");
@@ -73,7 +85,7 @@ export default function PdfToMockTest() {
       </div>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-4 text-red-800">{error}</p>}
       {job && <p role="status" className="rounded-lg bg-indigo-50 p-4">Job status: {job.status || "queued"}</p>}
-      {htmlUrl && <div className="flex flex-wrap gap-3 rounded-xl bg-white p-5 border"><a href={htmlUrl} target="_blank" rel="noreferrer" className="inline-flex gap-2 rounded-lg bg-indigo-700 px-4 py-2 text-white"><Play size={18}/> Open test</a><a href={htmlUrl} download className="inline-flex gap-2 rounded-lg border px-4 py-2"><Download size={18}/> Save HTML</a></div>}
+      {htmlUrl && <div className="flex flex-wrap gap-3 rounded-xl bg-white p-5 border"><button onClick={() => openResult(false)} className="inline-flex gap-2 rounded-lg bg-indigo-700 px-4 py-2 text-white"><Play size={18}/> Open test</button><button onClick={() => openResult(true)} className="inline-flex gap-2 rounded-lg border px-4 py-2"><Download size={18}/> Save HTML</button></div>}
     </section>
   </main>;
 }
