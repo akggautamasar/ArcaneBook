@@ -47,7 +47,7 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
   async function openResult(download: boolean) {
     if (!htmlUrl) return;
     try {
-      const response = await fetch(htmlUrl, {headers: {"X-API-Key": apiKey}});
+      const response = await fetch(htmlUrl, {credentials:"same-origin"});
       if (!response.ok) throw new Error("Unable to retrieve generated HTML");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -61,7 +61,7 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
     setBusy(true); setError("");
     try {
       const data = new FormData(); data.append("file",pdf);
-      const res = await fetch(API + "/api/probe", {method:"POST",body:data, headers: {"X-API-Key": apiKey}});
+      const res = await fetch(API + "/api/probe", {method:"POST",body:data, credentials:"same-origin"});
       const result = await res.text();
       if (!res.ok) throw new Error(result);
       setPreview(result);
