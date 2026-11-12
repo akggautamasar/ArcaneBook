@@ -33,7 +33,7 @@ const App = () => (
             />
             <Route path="/password-protected" element={<PasswordProtectedIndex />} />
             <Route path="/mock-tests" element={<MockTests />} />
-            <Route path="/pdf-to-mock-test" element={<ProtectedRoute><PdfToMockTest /></ProtectedRoute>} />
+            <Route path="/pdf-to-mock-test" element={<PdfToMockTest />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
