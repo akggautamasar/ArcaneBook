@@ -24,6 +24,7 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
   const [error, setError] = useState("");
   const [job, setJob] = useState<Job | null>(null);
   const [preview, setPreview] = useState("");
+  const [noAnswers, setNoAnswers] = useState(false);
   const [htmlUrl, setHtmlUrl] = useState("");
   async function sendPdf(action: 'probe'|'jobs', parsed?: Record<string,unknown>): Promise<Response> {
     if (!pdf) throw new Error('Choose a PDF first');
@@ -125,6 +126,7 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
       const result = await res.text();
       if (!res.ok) throw new Error(result);
       setPreview(result);
+      setNoAnswers(/answer lines found on 0 pages|total 0/i.test(result));
     } catch(e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false);setPhase(''); }
   }
@@ -142,6 +144,7 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
         <input id="pdf-upload" type="file" accept=".pdf,application/pdf" className="block w-full" onChange={e=>setPdf(e.target.files?.[0] || null)}/>
         <p className="text-sm text-slate-500">Supported: selectable-text PDFs with four-option questions and Ans (a–d) answer keys. Scanned PDFs require OCR first.</p>
         <button disabled={!pdf || busy || (!isAuthenticated && !publicEnabled)} onClick={probe} className="rounded-lg border px-4 py-2 disabled:opacity-50">Inspect PDF layout</button>
+        {noAnswers && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">No answer key was detected in this PDF. The converter may produce an empty mock test. Use a selectable-text solved paper with supported answer markings, or OCR scanned pages first.</p>}
         {preview && <pre className="max-h-60 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-100 p-3 text-xs">{preview}</pre>}
       </div>
       <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-3">
@@ -160,6 +163,7 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
       {busy && <div role="status" className="rounded-xl border bg-white p-4"><p className="font-medium">{phase || 'Working…'} {progress>0?progress+'%':''}</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full bg-indigo-600 transition-all" style={{width:progress+'%'}} /></div><p className="mt-2 text-xs text-slate-500">Large files upload in 1 MB chunks with automatic retries. Keep this tab open.</p></div>}
       {error && <p role="alert" className="rounded-lg bg-red-50 p-4 text-red-800">{error}</p>}
       {job && <p role="status" className="rounded-lg bg-indigo-50 p-4">Job status: {job.status || "queued"}</p>}
+      {htmlUrl && noAnswers && <p className="rounded-lg bg-amber-50 p-4 text-amber-900">Conversion completed, but the earlier inspection detected no answers. Open the result and verify that questions were extracted before using the test.</p>}
       {htmlUrl && <div className="flex flex-wrap gap-3 rounded-xl bg-white p-5 border"><button onClick={() => openResult(false)} className="inline-flex gap-2 rounded-lg bg-indigo-700 px-4 py-2 text-white"><Play size={18}/> Open test</button><button onClick={() => openResult(true)} className="inline-flex gap-2 rounded-lg border px-4 py-2"><Download size={18}/> Save HTML</button></div>}
     </section>
   </main>;
