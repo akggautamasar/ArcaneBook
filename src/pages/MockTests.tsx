@@ -144,6 +144,18 @@ const MockTests = () => {
         </div>
       </div>
 
+      <div className="max-w-6xl mx-auto px-4 pt-6">
+        <div className="rounded-2xl border border-teal-200 bg-white p-5 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-5">
+          <div>
+            <div className="mb-2 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">OCR answer key · Provisional scoring</div>
+            <h2 className="text-lg font-bold text-slate-900">DDA JE — Practice Set 1</h2>
+            <p className="mt-1 text-sm text-slate-600">120 scanned questions with Hindi, diagrams and four-option practice. Question 51 is unscored; the remaining OCR-derived answers require verification.</p>
+          </div>
+          <a href="https://arcanebook.duckdns.org/dda-je-interactive.html" target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-teal-700 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-800 sm:mt-0">
+            <Play className="h-4 w-4" /> Start DDA practice test
+          </a>
+        </div>
+      </div>
       <div className="max-w-6xl mx-auto px-4 pt-7 flex flex-wrap items-center gap-3">\n        <Link to="/pdf-to-mock-test" className="inline-flex items-center gap-2 rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white">Convert PDF to Mock Test</Link>
         <SlidersHorizontal className="h-4 w-4 text-slate-500" /><label htmlFor="sort-tests" className="text-sm font-medium">Sort by</label>
         <select id="sort-tests" className="rounded-md border bg-background p-2 text-sm" value={sortBy} onChange={e => setSortBy(e.target.value as 'newest' | 'questions' | 'title')}>
