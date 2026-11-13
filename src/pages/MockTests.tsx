@@ -156,7 +156,8 @@ const MockTests = () => {
           </a>
         </div>
       </div>
-      <div className="max-w-6xl mx-auto px-4 pt-7 flex flex-wrap items-center gap-3">\n        <Link to="/pdf-to-mock-test" className="inline-flex items-center gap-2 rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white">Convert PDF to Mock Test</Link>
+      <div className="max-w-6xl mx-auto px-4 pt-7 flex flex-wrap items-center gap-3">
+        <Link to="/pdf-to-mock-test" className="inline-flex items-center gap-2 rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white">Convert PDF to Mock Test</Link>
         <SlidersHorizontal className="h-4 w-4 text-slate-500" /><label htmlFor="sort-tests" className="text-sm font-medium">Sort by</label>
         <select id="sort-tests" className="rounded-md border bg-background p-2 text-sm" value={sortBy} onChange={e => setSortBy(e.target.value as 'newest' | 'questions' | 'title')}>
           <option value="newest">Newest first</option><option value="questions">Most questions</option><option value="title">Title A–Z</option>
