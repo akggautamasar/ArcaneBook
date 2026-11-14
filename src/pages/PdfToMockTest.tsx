@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ArrowLeft, FileUp, Loader2, Download, Play } from "lucide-react";
 
 const API = "";
+type SmartAnalysis = {pages:number;pdf_type:string;classification:string;confidence:string;recommended_strategy:string;supported_automatic_conversion:boolean;sampled_pages:number[];question_pages_sampled:number[];answer_pages_sampled:number[];warnings:string[];};
 type Job = { id?: string; job_id?: string; status?: string; error?: string; message?: string; detail?: string; question_count?: number; questions?: number };
 export default function PdfToMockTest({ embedded = false }: { embedded?: boolean }) {
   const [pdf, setPdf] = useState<File | null>(null);
@@ -27,7 +28,8 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
   const [noAnswers, setNoAnswers] = useState(false);
   const [htmlUrl, setHtmlUrl] = useState("");
   const [reviewRequired, setReviewRequired] = useState(false);
-  async function sendPdf(action: 'probe'|'jobs', parsed?: Record<string,unknown>): Promise<Response> {
+  const [analysis, setAnalysis] = useState<SmartAnalysis | null>(null);
+  async function sendPdf(action: 'probe'|'jobs'|'analyze', parsed?: Record<string,unknown>): Promise<Response> {
     if (!pdf) throw new Error('Choose a PDF first');
     // Small uploads keep the simple multipart path; large uploads use individually retried chunks.
     if (pdf.size <= 1024 * 1024) {
@@ -122,6 +124,18 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
       setTimeout(() => URL.revokeObjectURL(url), 120000);
     } catch(e) { setError(e instanceof Error ? e.message : String(e)); }
   }
+  async function analyzePdf() {
+    if (!pdf || !isAuthenticated) return;
+    setBusy(true);setError('');setAnalysis(null);
+    try {
+      const res=await sendPdf('analyze');
+      if(!res.ok)throw new Error(await readError(res));
+      const report:SmartAnalysis=await res.json();
+      setAnalysis(report);
+      if(report.supported_automatic_conversion && (report.recommended_strategy==='papers'||report.recommended_strategy==='chapters'))setMode(report.recommended_strategy);
+    }catch(e){setError(e instanceof Error?e.message:String(e));}
+    finally{setBusy(false);setPhase('');}
+  }
   async function probe() {
     if (!pdf || (!isAuthenticated && !publicEnabled)) return;
     setBusy(true); setError("");
@@ -147,10 +161,12 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
         <label className="font-semibold block" htmlFor="pdf-upload">1. Upload a solved-paper PDF</label>
         <input id="pdf-upload" type="file" accept=".pdf,application/pdf" className="block w-full" onChange={e=>setPdf(e.target.files?.[0] || null)}/>
         <p className="text-sm text-slate-500">Supported: selectable-text PDFs with four-option questions and Ans (a–d) answer keys. DDA-style scanned PDFs can be processed in the separate administrator-only OCR mode. Other scanned layouts are not supported yet.</p>
+        {isAuthenticated && <button disabled={!pdf || busy} onClick={analyzePdf} className="mr-3 rounded-lg bg-teal-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Smart analyze PDF</button>}
         <button disabled={!pdf || busy || mode === 'scanned-dda' || (!isAuthenticated && !publicEnabled)} onClick={probe} className="rounded-lg border px-4 py-2 disabled:opacity-50">Inspect PDF layout</button>
         {noAnswers && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">No answer key was detected in this PDF. The converter may produce an empty mock test. Use a selectable-text solved paper with supported answer markings, or OCR scanned pages first.</p>}
         {preview && <pre className="max-h-60 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-100 p-3 text-xs">{preview}</pre>}
       </div>
+      {analysis && <div className="rounded-2xl border border-teal-200 bg-white p-5 shadow-sm space-y-3" role="status"><h3 className="font-bold text-lg">Smart PDF analysis</h3><div className="grid gap-2 text-sm sm:grid-cols-2"><p><strong>Document:</strong> {analysis.pdf_type}</p><p><strong>Detected structure:</strong> {analysis.classification}</p><p><strong>Confidence:</strong> {analysis.confidence}</p><p><strong>Suggested engine:</strong> {analysis.recommended_strategy}</p><p><strong>Total pages:</strong> {analysis.pages}</p><p><strong>Pages inspected:</strong> {analysis.sampled_pages.join(", ")}</p></div><p className="text-sm text-slate-600">Sampled question pages: {analysis.question_pages_sampled.join(", ") || "not identified"}. Sampled answer pages: {analysis.answer_pages_sampled.join(", ") || "not identified"}.</p>{analysis.warnings.map((w,i)=><p key={i} className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{w}</p>)}<p className="text-xs text-slate-500">Analysis is a recommendation, not a verified extraction. Confirm paper boundaries and answer keys before generating or publishing.</p></div>}
       <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-3">
         {mode === "scanned-dda" && <div role="note" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><strong>Experimental DDA-style OCR</strong><p className="mt-1">Supports one 120-question DDA-style practice set per job, with an answer table on the next PDF page. This is not general scanned-PDF support. Extracted answers may be wrong; results require review and cannot be downloaded through the normal completed-test endpoint.</p></div>}
         <label htmlFor="pdf-config" className="font-semibold block">2. Configure paper or chapter ranges</label>
