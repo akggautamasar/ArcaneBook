@@ -21,6 +21,7 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
   const [mode, setMode] = useState<'universal'|'papers'|'chapters'|'scanned-dda'>('universal');
   const [startPage, setStartPage] = useState(1);
   const [endPage, setEndPage] = useState(10);
+  const [allPages, setAllPages] = useState(true);
   const [advanced, setAdvanced] = useState(false);
   const [error, setError] = useState("");
   const [job, setJob] = useState<Job | null>(null);
@@ -85,10 +86,10 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
     if (!pdf || (!isAuthenticated && !publicEnabled)) return;
     setBusy(true); setError(""); setJob(null); setHtmlUrl(""); setZipUrl(""); setReviewRequired(false);setProgress(0);
     try {
-      const parsed = mode === 'universal' ? {title,mode:'universal',start_page:startPage,end_page:endPage,preserveImages:true,flagUncertainAnswers:true} : advanced && mode !== 'scanned-dda' ? JSON.parse(config) : mode === 'scanned-dda' ? {title,mode,papers:[{name:'Practice Set 1',pages:[startPage,endPage]}]} : {title,mode,[mode]:[{name:mode==='papers'?'Paper 1':'Chapter 1',pages:[startPage,endPage]}]};
+      const parsed = mode === 'universal' ? {title,mode:'universal',start_page:allPages?1:startPage,end_page:allPages?0:endPage,preserveImages:true,flagUncertainAnswers:true} : advanced && mode !== 'scanned-dda' ? JSON.parse(config) : mode === 'scanned-dda' ? {title,mode,papers:[{name:'Practice Set 1',pages:[startPage,endPage]}]} : {title,mode,[mode]:[{name:mode==='papers'?'Paper 1':'Chapter 1',pages:[startPage,endPage]}]};
       if (mode === 'scanned-dda' && !isAuthenticated) throw new Error('Scanned DDA conversion is administrator-only.');
       if (mode === 'scanned-dda' && pdf.size > 100 * 1024 * 1024) throw new Error('Scanned DDA PDF must be 100 MiB or smaller.');
-      if(!Number.isInteger(startPage)||!Number.isInteger(endPage)||startPage<1||endPage<startPage)throw new Error('Enter a valid page range');
+      if(!(mode === 'universal' && allPages) && (!Number.isInteger(startPage)||!Number.isInteger(endPage)||startPage<1||endPage<startPage))throw new Error('Enter a valid page range');
       if (mode !== "universal" && !Array.isArray(parsed.papers) && !Array.isArray(parsed.chapters)) throw new Error("Configure papers or chapters with page ranges.");
       const res = await sendPdf(mode === 'universal' ? 'universal/jobs' : 'jobs',parsed);
       if(!res.ok)throw new Error(await readError(res));
@@ -145,7 +146,7 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
       const report:SmartAnalysis=await res.json();
       setAnalysis(report);
       setMode('universal');
-      setStartPage(1);setEndPage(report.pages);
+      setStartPage(1);setEndPage(report.pages);setAllPages(true);
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setBusy(false);setPhase('');}
   }
@@ -186,12 +187,15 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm font-medium">Test title<input value={title} onChange={e=>setTitle(e.target.value)} className="mt-1 w-full rounded-lg border p-3" /></label>
           <label className="text-sm font-medium">Group by<select value={mode} onChange={e=>setMode(e.target.value as 'universal'|'papers'|'chapters'|'scanned-dda')} className="mt-1 w-full rounded-lg border p-3"><option value="universal" disabled={!isAuthenticated}>Auto — image-first (admin only)</option><option value="papers">Papers (legacy text)</option><option value="chapters">Chapters (text PDF)</option>{isAuthenticated && <option value="scanned-dda">Scanned DDA practice set (OCR · beta)</option>}</select></label>
+          {mode === 'universal' && <label className="col-span-full flex items-center gap-2 rounded-lg bg-teal-50 p-3 text-sm font-medium text-teal-950"><input type="checkbox" checked={allPages} onChange={e=>setAllPages(e.target.checked)} /> Automatically convert the entire PDF (recommended)</label>}
+          {(mode !== 'universal' || !allPages) && <>
           <label className="text-sm font-medium">Start page<input type="number" min={1} value={startPage} onChange={e=>setStartPage(Number(e.target.value))} className="mt-1 w-full rounded-lg border p-3" /></label>
           <label className="text-sm font-medium">End page<input type="number" min={1} value={endPage} onChange={e=>setEndPage(Number(e.target.value))} className="mt-1 w-full rounded-lg border p-3" /></label>
+          </>}
         </div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={mode === "scanned-dda" || mode === "universal"} checked={advanced && mode !== "scanned-dda" && mode !== "universal"} onChange={e=>setAdvanced(e.target.checked)} /> Advanced (legacy engines): edit JSON for multiple papers/chapters</label>
         {advanced && mode !== "scanned-dda" && mode !== "universal" && <textarea id="pdf-config" value={config} onChange={e=>setConfig(e.target.value)} spellCheck={false} rows={9} className="w-full rounded-lg border p-3 font-mono text-sm" />}
-        <p className="text-sm text-slate-500">PDF page numbers are used. Smart analysis automatically selects the full PDF range. Universal mode uses original page images; uncertain keys remain unscored. Scanned DDA mode still needs the answer table on the next page.</p>
+        <p className="text-sm text-slate-500">PDF page numbers are used. Universal mode automatically processes all PDF pages unless you choose a custom range. Question/answer images retain their original appearance, and uncertain keys remain unscored. Scanned DDA mode still needs the answer table on the next page.</p>
         <button onClick={upload} disabled={!pdf || busy || (!isAuthenticated && !publicEnabled) || (mode === "universal" && !isAuthenticated)} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 font-semibold text-white disabled:opacity-50">{busy ? <Loader2 className="animate-spin" size={18}/> : <FileUp size={18}/>} {busy ? "Processing…" : "Generate mock test"}</button>
       </div>
       {busy && <div role="status" className="rounded-xl border bg-white p-4"><p className="font-medium">{phase || 'Working…'} {progress>0?progress+'%':''}</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full bg-indigo-600 transition-all" style={{width:progress+'%'}} /></div><p className="mt-2 text-xs text-slate-500">Large files upload in 1 MB chunks with automatic retries. Keep this tab open.</p></div>}
