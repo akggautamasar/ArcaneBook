@@ -5,7 +5,7 @@ import { ArrowLeft, FileUp, Loader2, Download, Play } from "lucide-react";
 
 const API = "";
 type SmartAnalysis = {pages:number;pdf_type:string;classification:string;confidence:string;recommended_strategy:string;supported_automatic_conversion:boolean;sampled_pages:number[];question_pages_sampled:number[];answer_pages_sampled:number[];warnings:string[];};
-type Job = { id?: string; job_id?: string; status?: string; error?: string; message?: string; detail?: string; question_count?: number; questions?: number };
+type Job = { id?: string; job_id?: string; status?: string; error?: string; message?: string; detail?: string; question_count?: number; questions?: number; progress?: number; phase?: string; quality?: {cards:number;questions:number;review_pages:number;scored:number;unscored:number}; review_required?: boolean };
 export default function PdfToMockTest({ embedded = false }: { embedded?: boolean }) {
   const [pdf, setPdf] = useState<File | null>(null);
   const { isAuthenticated } = useAuth();
@@ -18,7 +18,7 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState('');
   const [title, setTitle] = useState('My Mock Test');
-  const [mode, setMode] = useState<'papers'|'chapters'|'scanned-dda'>('papers');
+  const [mode, setMode] = useState<'universal'|'papers'|'chapters'|'scanned-dda'>('universal');
   const [startPage, setStartPage] = useState(1);
   const [endPage, setEndPage] = useState(10);
   const [advanced, setAdvanced] = useState(false);
@@ -27,9 +27,10 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
   const [preview, setPreview] = useState("");
   const [noAnswers, setNoAnswers] = useState(false);
   const [htmlUrl, setHtmlUrl] = useState("");
+  const [zipUrl, setZipUrl] = useState("");
   const [reviewRequired, setReviewRequired] = useState(false);
   const [analysis, setAnalysis] = useState<SmartAnalysis | null>(null);
-  async function sendPdf(action: 'probe'|'jobs'|'analyze', parsed?: Record<string,unknown>): Promise<Response> {
+  async function sendPdf(action: 'probe'|'jobs'|'analyze'|'universal/jobs', parsed?: Record<string,unknown>): Promise<Response> {
     if (!pdf) throw new Error('Choose a PDF first');
     // Small uploads keep the simple multipart path; large uploads use individually retried chunks.
     if (pdf.size <= 1024 * 1024) {
@@ -82,14 +83,14 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
   }
   async function upload() {
     if (!pdf || (!isAuthenticated && !publicEnabled)) return;
-    setBusy(true); setError(""); setJob(null); setHtmlUrl(""); setReviewRequired(false);setProgress(0);
+    setBusy(true); setError(""); setJob(null); setHtmlUrl(""); setZipUrl(""); setReviewRequired(false);setProgress(0);
     try {
-      const parsed = advanced && mode !== 'scanned-dda' ? JSON.parse(config) : mode === 'scanned-dda' ? {title,mode,papers:[{name:'Practice Set 1',pages:[startPage,endPage]}]} : {title,mode,[mode]:[{name:mode==='papers'?'Paper 1':'Chapter 1',pages:[startPage,endPage]}]};
+      const parsed = mode === 'universal' ? {title,mode:'universal',start_page:startPage,end_page:endPage,preserveImages:true,flagUncertainAnswers:true} : advanced && mode !== 'scanned-dda' ? JSON.parse(config) : mode === 'scanned-dda' ? {title,mode,papers:[{name:'Practice Set 1',pages:[startPage,endPage]}]} : {title,mode,[mode]:[{name:mode==='papers'?'Paper 1':'Chapter 1',pages:[startPage,endPage]}]};
       if (mode === 'scanned-dda' && !isAuthenticated) throw new Error('Scanned DDA conversion is administrator-only.');
       if (mode === 'scanned-dda' && pdf.size > 100 * 1024 * 1024) throw new Error('Scanned DDA PDF must be 100 MiB or smaller.');
       if(!Number.isInteger(startPage)||!Number.isInteger(endPage)||startPage<1||endPage<startPage)throw new Error('Enter a valid page range');
-      if (!Array.isArray(parsed.papers) && !Array.isArray(parsed.chapters)) throw new Error("Configure papers or chapters with page ranges.");
-      const res = await sendPdf('jobs',parsed);
+      if (mode !== "universal" && !Array.isArray(parsed.papers) && !Array.isArray(parsed.chapters)) throw new Error("Configure papers or chapters with page ranges.");
+      const res = await sendPdf(mode === 'universal' ? 'universal/jobs' : 'jobs',parsed);
       if(!res.ok)throw new Error(await readError(res));
       const result: Job = await res.json();
       const id = result.id || result.job_id;
@@ -97,14 +98,20 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
       setJob(result);
       setPhase('Generating interactive mock test');
       let finished=false;
-      for (let i=0;i<180;i++) {
+      for (let i=0;i<(mode==='universal'?900:180);i++) {
         await new Promise(r=>setTimeout(r,2000));
-        const poll = await fetch(API + "/api/jobs/" + encodeURIComponent(id), {credentials:"same-origin"});
+        const jobPath = API + (mode === 'universal' ? '/api/universal/jobs/' : '/api/jobs/') + encodeURIComponent(id);
+        const poll = await fetch(jobPath, {credentials:"same-origin"});
         if (!poll.ok) throw new Error("Unable to check conversion progress");
         const status: Job = await poll.json(); setJob(status);
+        if (typeof status.progress === 'number') setProgress(status.progress);
+        if (status.phase) setPhase(status.phase);
         if (status.status === "review_required") { setReviewRequired(true); finished=true; break; }
         if (["done","completed","success"].includes(status.status || "")) {
-          setHtmlUrl(API + "/api/jobs/" + encodeURIComponent(id) + "/html"); finished=true; break;
+          if (mode !== "universal" && endPage-startPage>=5 && typeof (status.question_count ?? status.questions) === "number" && (status.question_count ?? status.questions ?? 0)<2) throw new Error("Old converter extracted too few questions; use Universal image-first for this PDF.");
+          setHtmlUrl(jobPath + "/html");
+          if (mode === "universal") setZipUrl(jobPath + "/zip");
+          finished=true; break;
         }
         if (["error","failed","failed_review_required"].includes(status.status || "")) throw new Error(status.error || status.message || status.detail || "Conversion failed. Check converter job logs.");
       }
@@ -115,6 +122,11 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
   async function openResult(download: boolean) {
     if (!htmlUrl) return;
     try {
+      if (zipUrl) {
+        if (download) { const a=document.createElement('a'); a.href=zipUrl; a.download='ArcaneBook-image-mock.zip';document.body.appendChild(a);a.click();a.remove(); }
+        else window.open(htmlUrl,'_blank','noopener,noreferrer');
+        return;
+      }
       const response = await fetch(htmlUrl, {credentials:"same-origin"});
       if (!response.ok) throw new Error("Unable to retrieve generated HTML");
       const blob = await response.blob();
@@ -132,7 +144,8 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
       if(!res.ok)throw new Error(await readError(res));
       const report:SmartAnalysis=await res.json();
       setAnalysis(report);
-      if(report.supported_automatic_conversion && (report.recommended_strategy==='papers'||report.recommended_strategy==='chapters'))setMode(report.recommended_strategy);
+      setMode('universal');
+      setStartPage(1);setEndPage(report.pages);
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setBusy(false);setPhase('');}
   }
@@ -151,19 +164,19 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
   return <main className={embedded ? "rounded-xl bg-slate-50 text-slate-900" : "min-h-screen bg-slate-50 text-slate-900"}>
     {!embedded && <header className="bg-gradient-to-r from-slate-950 to-indigo-900 text-white p-6">
       <div className="max-w-4xl mx-auto"><Link to="/mock-tests" className="inline-flex items-center gap-2 text-indigo-200"><ArrowLeft size={18}/> Mock Test Library</Link>
-      <h1 className="text-3xl font-bold mt-5">PDF to Mock Test</h1><p className="text-indigo-100 mt-2">Convert solved papers and chapterwise PYQs into interactive timed tests.</p></div>
+      <h1 className="text-3xl font-bold mt-5">PDF to Mock Test</h1><p className="text-indigo-100 mt-2">Automatically detect PDF layouts and preserve original question, option and solution images.</p></div>
     </header>}
     <section className="max-w-4xl mx-auto p-5 space-y-5">
       {isAuthenticated && <div className="rounded-xl border bg-white p-4 flex flex-wrap justify-between items-center gap-3"><div><strong>Public PDF converter</strong><p className="text-xs text-slate-500">Off by default. Only admin can convert when off.</p></div><label className="flex items-center gap-2"><input type="checkbox" checked={publicEnabled} onChange={e=>updatePublic(e.target.checked)} />{publicEnabled?"Public enabled":"Admin only"}</label>{settingsError && <p role="alert" className="text-red-700">{settingsError}</p>}</div>}
       {!isAuthenticated && !publicEnabled && <p role="alert" className="rounded-lg bg-amber-50 p-4">Converter is currently admin-only. Please sign in as administrator.</p>}
 
       <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-4">
-        <label className="font-semibold block" htmlFor="pdf-upload">1. Upload a solved-paper PDF</label>
+        <label className="font-semibold block" htmlFor="pdf-upload">1. Upload any question-bank or solved-paper PDF</label>
         <input id="pdf-upload" type="file" accept=".pdf,application/pdf" className="block w-full" onChange={e=>setPdf(e.target.files?.[0] || null)}/>
-        <p className="text-sm text-slate-500">Supported: selectable-text PDFs with four-option questions and Ans (a–d) answer keys. DDA-style scanned PDFs can be processed in the separate administrator-only OCR mode. Other scanned layouts are not supported yet.</p>
+        <p className="text-sm text-slate-500">Universal image-first mode preserves questions, drawings, options and explanations as original PDF images. It creates unscored page-review cards where exact question boundaries cannot be detected. Legacy text and DDA converters remain available.</p>
         {isAuthenticated && <button disabled={!pdf || busy} onClick={analyzePdf} className="mr-3 rounded-lg bg-teal-700 px-4 py-2 font-semibold text-white disabled:opacity-50">Smart analyze PDF</button>}
         <button disabled={!pdf || busy || mode === 'scanned-dda' || (!isAuthenticated && !publicEnabled)} onClick={probe} className="rounded-lg border px-4 py-2 disabled:opacity-50">Inspect PDF layout</button>
-        {noAnswers && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">No answer key was detected in this PDF. The converter may produce an empty mock test. Use a selectable-text solved paper with supported answer markings, or OCR scanned pages first.</p>}
+        {noAnswers && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">No answer key was detected. Universal image-first can still create unscored image-based practice cards, but cannot safely assign correct options.</p>}
         {preview && <pre className="max-h-60 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-100 p-3 text-xs">{preview}</pre>}
       </div>
       {analysis && <div className="rounded-2xl border border-teal-200 bg-white p-5 shadow-sm space-y-3" role="status"><h3 className="font-bold text-lg">Smart PDF analysis</h3><div className="grid gap-2 text-sm sm:grid-cols-2"><p><strong>Document:</strong> {analysis.pdf_type}</p><p><strong>Detected structure:</strong> {analysis.classification}</p><p><strong>Confidence:</strong> {analysis.confidence}</p><p><strong>Suggested engine:</strong> {analysis.recommended_strategy}</p><p><strong>Total pages:</strong> {analysis.pages}</p><p><strong>Pages inspected:</strong> {analysis.sampled_pages.join(", ")}</p></div><p className="text-sm text-slate-600">Sampled question pages: {analysis.question_pages_sampled.join(", ") || "not identified"}. Sampled answer pages: {analysis.answer_pages_sampled.join(", ") || "not identified"}.</p>{analysis.warnings.map((w,i)=><p key={i} className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{w}</p>)}<p className="text-xs text-slate-500">Analysis is a recommendation, not a verified extraction. Confirm paper boundaries and answer keys before generating or publishing.</p></div>}
@@ -172,21 +185,21 @@ export default function PdfToMockTest({ embedded = false }: { embedded?: boolean
         <label htmlFor="pdf-config" className="font-semibold block">2. Configure paper or chapter ranges</label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm font-medium">Test title<input value={title} onChange={e=>setTitle(e.target.value)} className="mt-1 w-full rounded-lg border p-3" /></label>
-          <label className="text-sm font-medium">Group by<select value={mode} onChange={e=>setMode(e.target.value as 'papers'|'chapters'|'scanned-dda')} className="mt-1 w-full rounded-lg border p-3"><option value="papers">Papers (text PDF)</option><option value="chapters">Chapters (text PDF)</option>{isAuthenticated && <option value="scanned-dda">Scanned DDA practice set (OCR · beta)</option>}</select></label>
+          <label className="text-sm font-medium">Group by<select value={mode} onChange={e=>setMode(e.target.value as 'universal'|'papers'|'chapters'|'scanned-dda')} className="mt-1 w-full rounded-lg border p-3"><option value="universal">Auto — image-first (recommended)</option><option value="papers">Papers (legacy text)</option><option value="chapters">Chapters (text PDF)</option>{isAuthenticated && <option value="scanned-dda">Scanned DDA practice set (OCR · beta)</option>}</select></label>
           <label className="text-sm font-medium">Start page<input type="number" min={1} value={startPage} onChange={e=>setStartPage(Number(e.target.value))} className="mt-1 w-full rounded-lg border p-3" /></label>
           <label className="text-sm font-medium">End page<input type="number" min={1} value={endPage} onChange={e=>setEndPage(Number(e.target.value))} className="mt-1 w-full rounded-lg border p-3" /></label>
         </div>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={mode === "scanned-dda"} checked={advanced && mode !== "scanned-dda"} onChange={e=>setAdvanced(e.target.checked)} /> Advanced: edit JSON for multiple papers/chapters</label>
-        {advanced && mode !== "scanned-dda" && <textarea id="pdf-config" value={config} onChange={e=>setConfig(e.target.value)} spellCheck={false} rows={9} className="w-full rounded-lg border p-3 font-mono text-sm" />}
-        <p className="text-sm text-slate-500">Page numbers refer to the original PDF, not printed page numbers. In scanned DDA mode, enter question pages only; the answer table must be on the immediately following page.</p>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={mode === "scanned-dda" || mode === "universal"} checked={advanced && mode !== "scanned-dda" && mode !== "universal"} onChange={e=>setAdvanced(e.target.checked)} /> Advanced (legacy engines): edit JSON for multiple papers/chapters</label>
+        {advanced && mode !== "scanned-dda" && mode !== "universal" && <textarea id="pdf-config" value={config} onChange={e=>setConfig(e.target.value)} spellCheck={false} rows={9} className="w-full rounded-lg border p-3 font-mono text-sm" />}
+        <p className="text-sm text-slate-500">PDF page numbers are used. Smart analysis automatically selects the full PDF range. Universal mode uses original page images; uncertain keys remain unscored. Scanned DDA mode still needs the answer table on the next page.</p>
         <button onClick={upload} disabled={!pdf || busy || (!isAuthenticated && !publicEnabled)} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 font-semibold text-white disabled:opacity-50">{busy ? <Loader2 className="animate-spin" size={18}/> : <FileUp size={18}/>} {busy ? "Processing…" : "Generate mock test"}</button>
       </div>
       {busy && <div role="status" className="rounded-xl border bg-white p-4"><p className="font-medium">{phase || 'Working…'} {progress>0?progress+'%':''}</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full bg-indigo-600 transition-all" style={{width:progress+'%'}} /></div><p className="mt-2 text-xs text-slate-500">Large files upload in 1 MB chunks with automatic retries. Keep this tab open.</p></div>}
       {error && <p role="alert" className="rounded-lg bg-red-50 p-4 text-red-800">{error}</p>}
-      {job && <p role="status" className="rounded-lg bg-indigo-50 p-4">Job status: {job.status || "queued"}</p>}
+      {job && <div role="status" className="rounded-lg bg-indigo-50 p-4 text-sm">Job status: {job.status || "queued"}{typeof job.progress==='number' ? ` · ${job.progress}%` : ''}{job.message ? ` · ${job.message}` : ''}{job.quality && <p className="mt-2">{job.quality.questions} question images · {job.quality.scored} safely scored · {job.quality.unscored} unscored · {job.quality.review_pages} page-review cards</p>}</div>}
       {reviewRequired && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><strong>OCR finished — review required</strong><p className="mt-2">{job?.questions ?? "Questions"} questions extracted. Unverified answers: {Array.isArray((job as Job & {unverified_answers?: number[]})?.unverified_answers) ? (job as Job & {unverified_answers?: number[]}).unverified_answers?.join(", ") || "none flagged" : "see audit"}. Scoring is provisional. Publishing and HTML downloads are blocked until a separate review/approval workflow is implemented.</p></div>}
       {htmlUrl && noAnswers && <p className="rounded-lg bg-amber-50 p-4 text-amber-900">Conversion completed, but the earlier inspection detected no answers. Open the result and verify that questions were extracted before using the test.</p>}
-      {htmlUrl && <div className="flex flex-wrap gap-3 rounded-xl bg-white p-5 border"><button onClick={() => openResult(false)} className="inline-flex gap-2 rounded-lg bg-indigo-700 px-4 py-2 text-white"><Play size={18}/> Open test</button><button onClick={() => openResult(true)} className="inline-flex gap-2 rounded-lg border px-4 py-2"><Download size={18}/> Save HTML</button></div>}
+      {htmlUrl && <div className="flex flex-wrap gap-3 rounded-xl bg-white p-5 border"><button onClick={() => openResult(false)} className="inline-flex gap-2 rounded-lg bg-indigo-700 px-4 py-2 text-white"><Play size={18}/> Open test</button><button onClick={() => openResult(true)} className="inline-flex gap-2 rounded-lg border px-4 py-2"><Download size={18}/> {zipUrl ? 'Download offline ZIP' : 'Save HTML'}</button></div>}
     </section>
   </main>;
 }
