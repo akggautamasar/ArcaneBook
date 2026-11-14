@@ -8,6 +8,7 @@ No external services, no arbitrary code execution, no deletion of input PDF.
 from __future__ import annotations
 import argparse
 import html
+import hashlib
 import json
 import re
 import time
@@ -200,7 +201,9 @@ def build(pdf,out,first=1,last=None,title='ArcaneBook Image Mock',progress=None)
             if progress:
                 progress(page_num-first+1,last-first+1,len(items))
         if not items:raise ValueError('No usable page images could be generated')
-        manifest={'version':1,'mode':'image-first','test_id':uuid.uuid4().hex,'title':str(title)[:160],
+        with pdf.open('rb') as source:
+            fingerprint=hashlib.file_digest(source,'sha256').hexdigest()[:20]
+        manifest={'version':1,'mode':'image-first','test_id':f'{fingerprint}-{first}-{last}','title':str(title)[:160],
                   'pdf_type':analyze(pdf,first,last)['pdf_type'], 'classification':typ,
                   'source_pages':total,'selected_pages':[first,last],
                   'quality':{'cards':len(items),'questions':sum(x['kind']=='question' for x in items),
