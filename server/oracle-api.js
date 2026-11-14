@@ -124,7 +124,8 @@ async function handler(req,res) {
       if(u.received!==u.size)return reply(res,409,{error:'Upload incomplete',received:u.received});
       let raw='';for await(const c of req){raw+=c;if(raw.length>12000)return reply(res,413,{error:'Configuration too large'});}
       let data;try{data=JSON.parse(raw);}catch{return reply(res,400,{error:'Invalid configuration'});}
-      if(!['probe','jobs'].includes(data.action))return reply(res,400,{error:'Invalid action'});
+      if(!['probe','jobs','analyze'].includes(data.action))return reply(res,400,{error:'Invalid action'});
+      if(data.action==='analyze'&&!auth(req))return reply(res,403,{error:'Smart analysis is administrator-only'});
       const boundary='----arcane-'+randomUUID().replaceAll('-','');
       const pdfName='upload.pdf';
       const prefix=Buffer.from('--'+boundary+'\r\nContent-Disposition: form-data; name="file"; filename="'+pdfName+'"\r\nContent-Type: application/pdf\r\n\r\n');
@@ -142,9 +143,10 @@ async function handler(req,res) {
     }
     return reply(res,405,{error:'Unsupported upload action'});
   }
-  if(path.startsWith('/api/jobs')||path==='/api/probe'){
+  if(path.startsWith('/api/jobs')||path==='/api/probe'||path==='/api/analyze'){
     if(!['GET','POST','HEAD'].includes(req.method))return reply(res,405,{error:'Method not allowed'});
     const admin=auth(req);
+    if(path==='/api/analyze'&&!admin)return reply(res,403,{error:'Smart analysis is administrator-only'});
     if(!admin&&!publicEnabled)return reply(res,403,{error:'Converter is admin-only'});
     if(!sameOrigin(req)&&req.method==='POST')return reply(res,403,{error:'Invalid origin'});
     const create=req.method==='POST';
