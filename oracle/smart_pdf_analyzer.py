@@ -12,7 +12,7 @@ import pymupdf
 LABELS = {
     "papers": r"previous\s*year|previous\s*paper|solved\s*paper|ssc\s*je|rrb\s*je|exam\s*(?:held|date)|विगत\s*वर्ष|पिछले\s*वर्ष",
     "sets": r"practice\s*set|model\s*paper|mock\s*test|sample\s*paper|अभ्यास\s*सेट|प्रैक्टिस\s*सेट",
-    "chapters": r"chapter\s*\d+|unit\s*\d+|topic\s*wise|chapter\s*wise|अध्याय\s*\d+|विषयवार",
+    "chapters": r"chapter\s*\d+|unit\s*\d+|topic\s*[- ]?wise|chapter\s*[- ]?wise|अध्याय\s*\d+|अध्यायवार|अध्याय\s*वार|विषयवार",
 }
 QUESTION = re.compile(r"(?m)^\s*(?:Q(?:uestion)?\.?\s*)?\d{1,4}\s*[.)]\s+")
 OPTIONS = re.compile(r"(?im)(?:^|\s)[(]?[a-dA-D][).]\s+")
@@ -61,6 +61,7 @@ def inspect(pdf_path, preserve_images=True, flag_uncertain=True):
         counts = {key: 0 for key in LABELS}
         all_text = []
         scanned = 0
+        image_overlay = 0
         question_pages = []
         answer_pages = []
         index_pages = []
@@ -68,6 +69,10 @@ def inspect(pdf_path, preserve_images=True, flag_uncertain=True):
             page = doc.load_page(idx)
             native = page.get_text("text")[:15000]
             image_count = len(page.get_images(full=False))
+            # Large raster covering a page indicates image-backed OCR even with selectable text.
+            image_info = page.get_image_info()
+            if len(native.strip()) >= 120 and any((pymupdf.Rect(img["bbox"]).get_area() / max(page.rect.get_area(),1)) > .65 for img in image_info):
+                image_overlay += 1
             # OCR only image-heavy / text-poor sampled pages; no external service.
             needs_ocr = len(native.strip()) < 120
             text, ocr_state = (ocr_page(page) if needs_ocr else ("", "not_needed"))
@@ -95,35 +100,38 @@ def inspect(pdf_path, preserve_images=True, flag_uncertain=True):
                 "images": image_count, "questions_detected": q, "option_markers": opt
             })
         scanned_fraction = scanned / len(chosen)
-        pdf_kind = "scanned" if scanned_fraction >= .75 else ("hybrid" if scanned_fraction >= .2 else "text")
+        pdf_kind = "scanned" if scanned_fraction >= .75 else ("hybrid" if scanned_fraction >= .2 or image_overlay >= len(chosen)*.3 else "text")
         best = max(counts, key=counts.get)
         if counts[best] == 0:
             best = "unknown"
         elif counts[best] == counts.get("sets") and best != "sets" and counts["sets"] > 0:
             best = "sets"
-        confidence = "low" if best == "unknown" or counts.get(best, 0) < 2 else ("medium" if counts[best] < 5 else "high")
-        # Never silently invoke DDA-specific engine for arbitrary scans.
-        if pdf_kind == "text" and best == "chapters":
-            strategy = "chapters"
-        elif pdf_kind == "text" and best in ("papers", "sets"):
-            strategy = "papers"
-        else:
-            strategy = "review"
+        # A book title/TOC is stronger evidence than individual exam credits within questions.
+        opening = "\n".join(doc.load_page(i).get_text("text")[:9000] for i in range(min(total, 10)))
+        chapter_title = re.search(r"chapter\s*[- ]?wise|topic\s*[- ]?wise|अध्यायवार|अध्याय\s*वार", opening, re.I)
+        if chapter_title:
+            best = "chapters"
+        confidence = "high" if chapter_title else ("low" if best == "unknown" or counts.get(best, 0) < 2 else ("medium" if counts[best] < 5 else "high"))
+        # Image-first retains source PDF pixels; uncertain candidates remain unscored.
+        # The legacy DDA-specific OCR converter remains manually selectable.
+        strategy = "universal"
         warnings = []
-        if pdf_kind != "text":
-            warnings.append("General scanned/hybrid conversion is not yet supported; DDA OCR requires confirmed 120-question layout.")
-        if best == "unknown" or confidence == "low":
-            warnings.append("Book structure is uncertain; review detected sections and page ranges.")
+        if pdf_kind == "hybrid":
+            warnings.append("Image-backed OCR: original page image crops are safer than reconstructed text.")
+        if pdf_kind == "scanned":
+            warnings.append("Scanned pages without reliable question boundaries become unscored page-review cards.")
+        if best == "unknown":
+            warnings.append("Document grouping uncertain; universal mode can still preserve source page images.")
         if not answer_pages:
-            warnings.append("No answer key detected in sampled pages; full-document verification required.")
+            warnings.append("No answer key in samples; unverified questions will not be scored.")
         if any(x["ocr_status"] not in ("ok", "not_needed") for x in records):
             warnings.append("OCR was unavailable or failed on some sampled pages.")
         return {
-            "version": 1, "pages": total, "sampled_pages": [i + 1 for i in chosen],
+            "version": 2, "pages": total, "sampled_pages": [i + 1 for i in chosen],
             "initial_pages": list(range(1, min(total, 10) + 1)),
             "pdf_type": pdf_kind, "classification": best, "confidence": confidence,
             "recommended_strategy": strategy,
-            "supported_automatic_conversion": strategy in ("papers", "chapters"),
+            "supported_automatic_conversion": True, "image_first_supported": True,
             "evidence": evidence, "question_pages_sampled": question_pages,
             "answer_pages_sampled": answer_pages, "contents_pages_sampled": index_pages,
             "sample_details": records, "preserve_images": bool(preserve_images),
