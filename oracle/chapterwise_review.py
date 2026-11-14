@@ -14,7 +14,10 @@ import pymupdf
 
 QUESTION = re.compile(r"(?m)^\s*(\d{1,4})\s*[.,)]\s*(?:\n|\s+)")
 ANSWER = re.compile(r"(?im)\bAns\s*:\s*[(]?\s*([a-d])\s*[)]?")
-OPTION = re.compile(r"(?im)^\s*[(]([a-d])[)]\s*")
+OPTION = re.compile(r"(?i)(?<!\\w)\\(([a-d])\\)\\s*")
+# Common corrupt OCR glyphs are only evidence of an option, never a valid A-D label.
+SUSPECT_OPTION = re.compile(r"(?<!\\w)\\(([0-9०-९])\\)\\s*")
+ANSWER_LINE = re.compile(r"(?im)\\bAns\\s*:\\s*([^\\n]{0,45})")
 CHAPTER = re.compile(r"(?i)collection of multiple.choice|questions asked in various examinations|प्रश्नों का संग्रह")
 
 
@@ -45,13 +48,29 @@ def inspect(pdf, first, last, max_pages=30):
                     fragment = text[match.end():end].strip()
                     if len(fragment) < 15:
                         continue
-                    option_count = len(OPTION.findall(fragment))
+                    valid_options = [m.group(1).lower() for m in OPTION.finditer(fragment)]
+                    suspect_options = [m.group(1) for m in SUSPECT_OPTION.finditer(fragment)]
+                    option_count = len(valid_options)
                     keys = ANSWER.findall(fragment)
+                    answer_lines = [m.group(1).strip() for m in ANSWER_LINE.finditer(fragment)]
+                    issues = []
+                    if len(valid_options) < 4:
+                        issues.append("fewer_than_four_valid_option_labels")
+                    if suspect_options:
+                        issues.append("corrupt_or_numeric_option_labels")
+                    if not keys:
+                        issues.append("answer_not_verified")
+                    if len(set(keys)) > 1:
+                        issues.append("conflicting_answer_candidates")
                     candidates.append({
                         "number": int(match.group(1)),
                         "column": col_index+1,
                         "excerpt": fragment[:650],
                         "option_markers": option_count,
+                        "valid_option_labels": valid_options,
+                        "suspect_option_labels": suspect_options,
+                        "answer_lines": answer_lines,
+                        "review_issues": issues,
                         "answer_candidates": keys,
                         "answer_status": "review_required",
                         "confidence": "candidate_only"
@@ -63,6 +82,8 @@ def inspect(pdf, first, last, max_pages=30):
                 "mode": "chapterwise-review", "published": False, "scored": False,
                 "preserve_images": True, "flag_uncertain_answers": True,
                 "pages": pages, "total_candidates": sum(x["question_candidates"] for x in pages),
+                "four_valid_option_candidates": sum(len(c["valid_option_labels"]) >= 4 for p in pages for c in p["candidates"]),
+                "corrupt_option_candidates": sum(bool(c["suspect_option_labels"]) for p in pages for c in p["candidates"]),
                 "warning": "Candidate detection only. OCR numbering, answers, diagrams and reading order require review."}
     finally:
         doc.close()
@@ -79,7 +100,7 @@ def render(pdf, result, out):
             parts.append(f'<section><h2>PDF page {record["page"]} — {len(record["candidates"])} candidates</h2><img loading="lazy" alt="Original PDF page with diagrams" src="data:image/jpeg;base64,{encoded}">')
             for c in record["candidates"]:
                 excerpt = html.escape(c["excerpt"])
-                parts.append(f'<details><summary>Candidate Q{c["number"]}, column {c["column"]} — REVIEW REQUIRED</summary><pre>{excerpt}</pre><small>Detected option markers: {c["option_markers"]}; answer candidates (unverified): {html.escape(str(c["answer_candidates"]))}</small></details>')
+                parts.append(f'<details><summary>Candidate Q{c["number"]}, column {c["column"]} — REVIEW REQUIRED</summary><pre>{excerpt}</pre><small>Valid labels: {html.escape(str(c["valid_option_labels"]))}; suspicious labels: {html.escape(str(c["suspect_option_labels"]))}; answer candidates (unverified): {html.escape(str(c["answer_candidates"]))}; review issues: {html.escape(str(c["review_issues"]))}</small></details>')
             parts.append('</section>')
         parts.append('</html>')
         Path(out).write_text("\n".join(parts),encoding="utf-8")
