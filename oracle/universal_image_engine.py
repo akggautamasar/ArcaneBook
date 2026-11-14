@@ -104,14 +104,16 @@ def analyze(pdf,first=1,last=None):
         if not doc.page_count:raise ValueError('PDF has no pages')
         last=doc.page_count if last is None else int(last)
         if not (1<=first<=last<=doc.page_count):raise ValueError('Invalid page range')
-        sampled=[]; scanned=0; qcounts=[]
+        sampled=[]; scanned=0; overlays=0; qcounts=[]
         for page_number in sorted(set([first]+[min(last,first+i) for i in range(9)]+[last])):
             page=doc[page_number-1]
             words=len(page.get_text('words'))
             if words<12:scanned+=1
+            if words>=12 and any(pymupdf.Rect(img['bbox']).get_area() > page.rect.get_area()*.65 for img in page.get_image_info()):
+                overlays+=1
             qcounts.append(sum(1 for label,region in columns(page) for line in extract_lines(page,region) if Q_RE.match(line['text'])))
             sampled.append({'page':page_number,'words':words,'question_markers':qcounts[-1]})
-        kind='scanned' if scanned>=len(sampled)*.7 else ('hybrid' if scanned else 'text')
+        kind='scanned' if scanned>=len(sampled)*.7 else ('hybrid' if scanned or overlays>=len(sampled)*.3 else 'text')
         return {'pages':doc.page_count,'page_range':[first,last],'pdf_type':kind,'classification':structure(doc),
                 'recommended_strategy':'image-first','images_preserved':True,'sample_details':sampled,
                 'review_required':True,'sampled_questions':sum(qcounts),
