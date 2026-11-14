@@ -14,10 +14,10 @@ import pymupdf
 
 QUESTION = re.compile(r"(?m)^\s*(\d{1,4})\s*[.,)]\s*(?:\n|\s+)")
 ANSWER = re.compile(r"(?im)\bAns\s*:\s*[(]?\s*([a-d])\s*[)]?")
-OPTION = re.compile(r"(?i)(?<!\\w)\\(([a-d])\\)\\s*")
+OPTION = re.compile(r"(?i)(?<!\w)\(([a-d])\)\s*")
 # Common corrupt OCR glyphs are only evidence of an option, never a valid A-D label.
-SUSPECT_OPTION = re.compile(r"(?<!\\w)\\(([0-9०-९])\\)\\s*")
-ANSWER_LINE = re.compile(r"(?im)\\bAns\\s*:\\s*([^\\n]{0,45})")
+SUSPECT_OPTION = re.compile(r"(?<!\w)\(([0-9०-९])\)\s*")
+ANSWER_LINE = re.compile(r"(?im)\bAns\s*:\s*([^\n]{0,45})")
 CHAPTER = re.compile(r"(?i)collection of multiple.choice|questions asked in various examinations|प्रश्नों का संग्रह")
 
 
