@@ -112,7 +112,7 @@ def register_universal_routes(app):
             last = int(cfg.get("end_page", 0))
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="Invalid page range")
-        if not 1 <= first <= last <= 10000 or last - first + 1 > 600:
+        if not 1 <= first <= 10000 or (last != 0 and (last < first or last - first + 1 > 600)):
             raise HTTPException(status_code=400, detail="Select 1–600 PDF pages")
         title = str(cfg.get("title", "ArcaneBook Image Mock"))[:160].strip() or "ArcaneBook Image Mock"
         JOBS.mkdir(parents=True, exist_ok=True)
@@ -139,8 +139,12 @@ def register_universal_routes(app):
             import pymupdf
             try:
                 with pymupdf.open(folder / "upload.pdf") as doc:
-                    if doc.needs_pass or last > doc.page_count:
-                        raise HTTPException(status_code=422, detail="Encrypted PDF or page range exceeds document")
+                    if doc.needs_pass:
+                        raise HTTPException(status_code=422, detail="Encrypted PDF is not supported")
+                    if last == 0:
+                        last = doc.page_count
+                    if last > doc.page_count or last - first + 1 > 600:
+                        raise HTTPException(status_code=422, detail="Page range exceeds PDF or 600-page limit")
             except HTTPException:
                 raise
             except Exception:
