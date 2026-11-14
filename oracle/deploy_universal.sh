@@ -43,6 +43,8 @@ echo "=== CHECK PYTHON SYNTAX AND IMPORTS ==="
    "$SRC/oracle/universal_api.py" "$SRC/oracle/install_universal_api.py" \
    "$SRC/oracle/smart_pdf_analyzer.py"
 "$PY" -c 'import fastapi, pymupdf; print("FastAPI and PyMuPDF available")'
+"$PY" "$SRC/oracle/test_universal_image_engine.py" -v
+runuser -u ubuntu -- node --check "$SRC/server/oracle-api.js"
 
 echo "=== BACK UP LIVE FILES ==="
 mkdir -p "$BACK"
